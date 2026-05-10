@@ -10,4 +10,3 @@ $(TARGET): $(OBJECTS)
 
 clean:
 	$(RM) $(CLEANFILES)
-
