@@ -2,14 +2,13 @@
 #define __LASER_H
 
 /* Initialise laser DAC output.
- *   device_name    — SDL audio device name for the DAC-ILDA interface.
- *                   Pass NULL to use the system default output device.
- *                   Pass "" to disable laser output entirely.
- *   channel_map_str — comma-separated output channel indices for X, Y, Z.
- *                   e.g. "0,1,2" maps X→ch0, Y→ch1, Z→ch2 (default).
- *                   Pass NULL or "" to use the default mapping.
+ *   device_name  — SDL audio device name for the DAC-ILDA interface.
+ *                  Pass NULL to use the system default output device.
+ *                  Pass "" to disable laser output entirely.
+ *   x_ch, y_ch, z_ch — zero-based output channel indices for X, Y, Z/blank.
+ *                  Defaults are 0, 1, 2.
  * The device's native sample rate is used automatically. */
-void laser_init(const char *device_name, const char *channel_map_str);
+void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch);
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().

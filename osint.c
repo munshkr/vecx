@@ -1,5 +1,6 @@
 
 #include <getopt.h>
+#include <stdlib.h>
 
 #include "SDL.h"
 #include "SDL2_gfxPrimitives.h"
@@ -187,21 +188,26 @@ struct cli_options {
   const char *cart;
   const char *overlay;
   const char *laser_device;
-  const char *laser_map;
+  int laser_x_ch;
+  int laser_y_ch;
+  int laser_z_ch;
 };
 
 static void usage(const char *prog, int exitcode) {
-  fprintf(exitcode ? stderr : stdout,
-          "Usage: %s [OPTIONS]\n"
-          "\n"
-          "Options:\n"
-          "  --rom FILE           ROM file to load (default: rom.dat)\n"
-          "  --cart FILE          Cartridge ROM file\n"
-          "  --overlay FILE       Overlay BMP image file\n"
-          "  --laser-device DEV   Laser device path\n"
-          "  --laser-map MAP      Laser channel map string\n"
-          "  --help               Show this help and exit\n",
-          prog);
+  fprintf(
+      exitcode ? stderr : stdout,
+      "Usage: %s [OPTIONS]\n"
+      "\n"
+      "Options:\n"
+      "  --rom FILE           ROM file to load (default: rom.dat)\n"
+      "  --cart FILE          Cartridge ROM file\n"
+      "  --overlay FILE       Overlay BMP image file\n"
+      "  --laser-device DEV   Laser DAC audio device name\n"
+      "  --laser-x NUM        Output channel index for X (default: 0)\n"
+      "  --laser-y NUM        Output channel index for Y (default: 1)\n"
+      "  --laser-z NUM        Output channel index for Z/blank (default: 2)\n"
+      "  --help               Show this help and exit\n",
+      prog);
   exit(exitcode);
 }
 
@@ -211,7 +217,9 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       {"cart", required_argument, NULL, 'c'},
       {"overlay", required_argument, NULL, 'o'},
       {"laser-device", required_argument, NULL, 'd'},
-      {"laser-map", required_argument, NULL, 'm'},
+      {"laser-x", required_argument, NULL, 'x'},
+      {"laser-y", required_argument, NULL, 'y'},
+      {"laser-z", required_argument, NULL, 'z'},
       {"help", no_argument, NULL, 'h'},
       {NULL, 0, NULL, 0}};
 
@@ -219,7 +227,9 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
   opts->cart = NULL;
   opts->overlay = NULL;
   opts->laser_device = NULL;
-  opts->laser_map = NULL;
+  opts->laser_x_ch = 0;
+  opts->laser_y_ch = 1;
+  opts->laser_z_ch = 2;
 
   int c;
   while ((c = getopt_long(argc, argv, "", long_opts, NULL)) != -1) {
@@ -236,8 +246,14 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
     case 'd':
       opts->laser_device = optarg;
       break;
-    case 'm':
-      opts->laser_map = optarg;
+    case 'x':
+      opts->laser_x_ch = atoi(optarg);
+      break;
+    case 'y':
+      opts->laser_y_ch = atoi(optarg);
+      break;
+    case 'z':
+      opts->laser_z_ch = atoi(optarg);
       break;
     case 'h':
       usage(argv[0], 0);
@@ -288,7 +304,8 @@ int main(int argc, char *argv[]) {
   init(opts.rom, opts.cart);
 
   e8910_init_sound();
-  laser_init(opts.laser_device, opts.laser_map);
+  laser_init(opts.laser_device, opts.laser_x_ch, opts.laser_y_ch,
+             opts.laser_z_ch);
   osint_emuloop();
   laser_done();
   e8910_done_sound();

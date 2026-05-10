@@ -80,15 +80,7 @@ static void laser_callback(void *userdata, Uint8 *stream, int len) {
 /* -------------------------------------------------------------------------
  * Public API
  * ------------------------------------------------------------------------- */
-static void parse_channel_map(const char *str, int map[3]) {
-  map[0] = 0;
-  map[1] = 1;
-  map[2] = 2; /* defaults: X→0, Y→1, Z→2 */
-  if (str && str[0])
-    sscanf(str, "%d,%d,%d", &map[0], &map[1], &map[2]);
-}
-
-void laser_init(const char *device_name, const char *channel_map_str) {
+void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch) {
   SDL_AudioSpec req, given;
   int req_channels, max_ch;
   SDL_zero(req);
@@ -96,7 +88,9 @@ void laser_init(const char *device_name, const char *channel_map_str) {
   if (device_name && device_name[0] == '\0')
     return; /* empty string disables laser output */
 
-  parse_channel_map(channel_map_str, laser_channel_map);
+  laser_channel_map[0] = x_ch;
+  laser_channel_map[1] = y_ch;
+  laser_channel_map[2] = z_ch;
 
   /* Determine how many channels the device must provide. */
   max_ch = laser_channel_map[0];
