@@ -2378,10 +2378,12 @@ unsigned e6809_sstep(unsigned irq_i, unsigned irq_f) {
     break;
   /* rti */
   case 0x3b:
+    reg_cc = pull8(&reg_s);
+    cycles += 1;
     if (get_cc(FLAG_E)) {
-      inst_pul(0xff, &reg_s, &reg_u, &cycles);
+      inst_pul(0xfe, &reg_s, &reg_u, &cycles);
     } else {
-      inst_pul(0x81, &reg_s, &reg_u, &cycles);
+      inst_pul(0x80, &reg_s, &reg_u, &cycles);
     }
 
     cycles += 3;
