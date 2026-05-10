@@ -4,6 +4,7 @@
 #include "SDL_image.h"
 
 #include "e8910.h"
+#include "laser.h"
 #include "osint.h"
 #include "vecx.h"
 
@@ -216,7 +217,9 @@ int main(int argc, char *argv[]) {
   init();
 
   e8910_init_sound();
+  laser_init(argc > 3 ? argv[3] : NULL);
   osint_emuloop();
+  laser_done();
   e8910_done_sound();
   SDL_Quit();
 

@@ -1,6 +1,7 @@
 #include "vecx.h"
 #include "e6809.h"
 #include "e8910.h"
+#include "laser.h"
 #include "osint.h"
 #include <stdio.h>
 
@@ -900,6 +901,8 @@ static einline void alg_sstep(void) {
     alg_vector_x1 = alg_curr_x;
     alg_vector_y1 = alg_curr_y;
   }
+
+  laser_push(alg_curr_x, alg_curr_y, sig_blank);
 }
 
 void vecx_emu(long cycles) {
