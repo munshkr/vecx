@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
   init();
 
   e8910_init_sound();
-  laser_init(argc > 3 ? argv[3] : NULL);
+  laser_init(argc > 3 ? argv[3] : NULL, argc > 4 ? argv[4] : NULL);
   osint_emuloop();
   laser_done();
   e8910_done_sound();

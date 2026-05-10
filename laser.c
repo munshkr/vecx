@@ -9,8 +9,9 @@
 #define LASER_RING_SIZE 4096
 #define LASER_RING_MASK (LASER_RING_SIZE - 1)
 
+/* Hint passed to SDL; ALLOW_FREQUENCY_CHANGE lets the driver use its native
+ * rate instead, which laser_dda_rate picks up from given.freq. */
 #define LASER_REQUESTED_FREQ 44100
-#define LASER_REQUESTED_CH 3
 
 typedef struct {
   float x, y, z;
@@ -25,7 +26,9 @@ static SDL_atomic_t laser_head; /* next write slot  */
 static SDL_atomic_t laser_tail; /* next read  slot  */
 
 static SDL_AudioDeviceID laser_device_id = 0;
-static int laser_channels = LASER_REQUESTED_CH;
+static int laser_channels = 3;
+/* channel_map[0/1/2] = which output channel index receives X/Y/Z */
+static int laser_channel_map[3] = {0, 1, 2};
 
 /* DDA accumulator for integer-ratio downsampling from VECTREX_MHZ to the
  * actual device frequency.  laser_dda_rate is the device sample rate. */
@@ -60,38 +63,61 @@ static void laser_callback(void *userdata, Uint8 *stream, int len) {
       SDL_AtomicSet(&laser_tail, (tail + 1) & LASER_RING_MASK);
     }
 
-    out[i * ch + 0] = x;
-    out[i * ch + 1] = y;
-    out[i * ch + 2] = z;
-    /* If the device negotiated 4 channels (common on macOS CoreAudio),
-     * fill the extra channel with silence. */
-    if (ch >= 4)
-      out[i * ch + 3] = 0.0f;
+    /* Zero the full frame, then place signals at the mapped channel indices.
+     * This handles any channel count the device negotiated (e.g. 4 on macOS).
+     */
+    for (int c = 0; c < ch; c++)
+      out[i * ch + c] = 0.0f;
+    if (laser_channel_map[0] < ch)
+      out[i * ch + laser_channel_map[0]] = x;
+    if (laser_channel_map[1] < ch)
+      out[i * ch + laser_channel_map[1]] = y;
+    if (laser_channel_map[2] < ch)
+      out[i * ch + laser_channel_map[2]] = z;
   }
 }
 
 /* -------------------------------------------------------------------------
  * Public API
  * ------------------------------------------------------------------------- */
-void laser_init(const char *device_name) {
+static void parse_channel_map(const char *str, int map[3]) {
+  map[0] = 0;
+  map[1] = 1;
+  map[2] = 2; /* defaults: X→0, Y→1, Z→2 */
+  if (str && str[0])
+    sscanf(str, "%d,%d,%d", &map[0], &map[1], &map[2]);
+}
+
+void laser_init(const char *device_name, const char *channel_map_str) {
   SDL_AudioSpec req, given;
+  int req_channels, max_ch;
   SDL_zero(req);
 
   if (device_name && device_name[0] == '\0')
     return; /* empty string disables laser output */
 
+  parse_channel_map(channel_map_str, laser_channel_map);
+
+  /* Determine how many channels the device must provide. */
+  max_ch = laser_channel_map[0];
+  if (laser_channel_map[1] > max_ch)
+    max_ch = laser_channel_map[1];
+  if (laser_channel_map[2] > max_ch)
+    max_ch = laser_channel_map[2];
+  req_channels = max_ch + 1;
+
   req.freq = LASER_REQUESTED_FREQ;
   req.format = AUDIO_F32SYS;
-  req.channels = LASER_REQUESTED_CH;
+  req.channels = req_channels;
   req.samples = 512;
   req.callback = laser_callback;
   req.userdata = NULL;
 
-  /* SDL_AUDIO_ALLOW_CHANNELS_CHANGE: let the driver tell us the real channel
-   * count (e.g. 4 on macOS) so the callback writes correctly-sized frames.
-   * Frequency is kept fixed; SDL will resample if the device differs. */
+  /* Allow the driver to adjust channel count (e.g. macOS rounds to 4) and
+   * frequency (so we use the device's native rate rather than resampling). */
   laser_device_id = SDL_OpenAudioDevice(device_name, 0, &req, &given,
-                                        SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
+                                        SDL_AUDIO_ALLOW_CHANNELS_CHANGE |
+                                            SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
 
   if (laser_device_id == 0) {
     fprintf(stderr, "laser: couldn't open device '%s': %s\n",
@@ -103,15 +129,17 @@ void laser_init(const char *device_name) {
   laser_dda_rate = (unsigned)given.freq;
 
   fprintf(stdout,
-          "laser: opened '%s' — %d Hz, %d ch (requested %d), fmt 0x%04x\n",
+          "laser: opened '%s' — %d Hz, %d ch, fmt 0x%04x, "
+          "map X=%d Y=%d Z=%d\n",
           device_name ? device_name : "(default)", given.freq, given.channels,
-          LASER_REQUESTED_CH, given.format);
+          given.format, laser_channel_map[0], laser_channel_map[1],
+          laser_channel_map[2]);
 
-  if (given.channels < 3) {
+  if (given.channels < req_channels) {
     fprintf(stderr,
-            "laser: WARNING — only %d channel(s) available; "
-            "Z/blank output will be missing\n",
-            given.channels);
+            "laser: WARNING — device gave %d channel(s), need %d; "
+            "some signals may be missing\n",
+            given.channels, req_channels);
   }
 
   SDL_AtomicSet(&laser_head, 0);
