@@ -19,14 +19,15 @@ Usage
 vecx [OPTIONS]
 
 Options:
-  --rom FILE           ROM file to load (default: rom.dat)
-  --cart FILE          Cartridge ROM file
-  --overlay FILE       Overlay BMP image file
-  --laser-device DEV   Laser DAC audio device name
-  --laser-x NUM        Output channel index for X (default: 0)
-  --laser-y NUM        Output channel index for Y (default: 1)
-  --laser-z NUM        Output channel index for Z/blank (default: 2)
-  --help               Show this help and exit
+  --rom FILE             ROM file to load (default: rom.dat)
+  --cart FILE            Cartridge ROM file
+  --overlay FILE         Overlay BMP image file
+  --laser-device DEV     Audio-to-ILDA device name
+  --laser-x NUM          Output channel index for X (default: 0)
+  --laser-y NUM          Output channel index for Y (default: 1)
+  --laser-z NUM          Output channel index for Z/blank (default: 2)
+  --list-audio-devices   List available audio output devices and exit
+  --help                 Show this help and exit
 ```
 
 Examples:
@@ -34,7 +35,8 @@ Examples:
 ./vecx --rom rom.dat
 ./vecx --rom rom.dat --cart mygame.bin
 ./vecx --rom rom.dat --cart mygame.bin --overlay overlay.bmp
-./vecx --rom rom.dat --cart mygame.bin --laser-device "DAC-ILDA"
+./vecx --list-audio-devices
+./vecx --rom rom.dat --cart mygame.bin --laser-device "DAC Name"
 ```
 
 Laser Output

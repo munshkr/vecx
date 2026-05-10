@@ -85,9 +85,6 @@ void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch) {
   int req_channels, max_ch;
   SDL_zero(req);
 
-  if (device_name && device_name[0] == '\0')
-    return; /* empty string disables laser output */
-
   laser_channel_map[0] = x_ch;
   laser_channel_map[1] = y_ch;
   laser_channel_map[2] = z_ch;

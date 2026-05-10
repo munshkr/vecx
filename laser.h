@@ -1,10 +1,9 @@
 #ifndef __LASER_H
 #define __LASER_H
 
-/* Initialise laser DAC output.
- *   device_name  — SDL audio device name for the DAC-ILDA interface.
+/* Initialise laser DAC output. Only call this when laser output is desired.
+ *   device_name  — SDL audio device name for the audio-to-ILDA interface.
  *                  Pass NULL to use the system default output device.
- *                  Pass "" to disable laser output entirely.
  *   x_ch, y_ch, z_ch — zero-based output channel indices for X, Y, Z/blank.
  *                  Defaults are 0, 1, 2.
  * The device's native sample rate is used automatically. */
