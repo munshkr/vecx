@@ -29,6 +29,8 @@ static SDL_AudioDeviceID laser_device_id = 0;
 static int laser_channels = 3;
 /* channel_map[0/1/2] = which output channel index receives X/Y/Z */
 static int laser_channel_map[3] = {0, 1, 2};
+static int laser_flip_x = 0;
+static int laser_flip_y = 0;
 
 /* DDA accumulator for integer-ratio downsampling from VECTREX_MHZ to the
  * actual device frequency.  laser_dda_rate is the device sample rate. */
@@ -80,7 +82,8 @@ static void laser_callback(void *userdata, Uint8 *stream, int len) {
 /* -------------------------------------------------------------------------
  * Public API
  * ------------------------------------------------------------------------- */
-void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch) {
+void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch,
+                int flip_x, int flip_y) {
   SDL_AudioSpec req, given;
   int req_channels, max_ch;
   SDL_zero(req);
@@ -88,6 +91,8 @@ void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch) {
   laser_channel_map[0] = x_ch;
   laser_channel_map[1] = y_ch;
   laser_channel_map[2] = z_ch;
+  laser_flip_x = flip_x;
+  laser_flip_y = flip_y;
 
   /* Determine how many channels the device must provide. */
   max_ch = laser_channel_map[0];
@@ -191,6 +196,10 @@ void laser_push(long x, long y, unsigned blank) {
     fy = -1.0f;
   if (fy > 1.0f)
     fy = 1.0f;
+  if (laser_flip_x)
+    fx = -fx;
+  if (laser_flip_y)
+    fy = -fy;
 
   /* Z: +1.0 = beam on, -1.0 = beam off.
    * Invert the sign here if your DAC-ILDA uses opposite polarity. */

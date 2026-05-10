@@ -26,6 +26,8 @@ Options:
   --laser-x NUM          Output channel index for X (default: 0)
   --laser-y NUM          Output channel index for Y (default: 1)
   --laser-z NUM          Output channel index for Z/blank (default: 2)
+  --laser-flip-x         Invert the X axis
+  --laser-flip-y         Invert the Y axis
   --list-audio-devices   List available audio output devices and exit
   --help                 Show this help and exit
 ```
@@ -70,6 +72,14 @@ If your interface uses a different channel order, override with `--laser-x`,
 
 ```
 ./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-z 3
+```
+
+If the projected image is mirrored, use `--laser-flip-x` and/or `--laser-flip-y`
+to invert the respective axis:
+
+```
+./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-flip-y
+./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-flip-x --laser-flip-y
 ```
 
 > **Note**: if the emulator stalls and the audio buffer empties, the output

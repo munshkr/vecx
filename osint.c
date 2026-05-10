@@ -192,6 +192,8 @@ struct cli_options {
   int laser_y_ch;
   int laser_z_ch;
   int laser_ch_set; /* non-zero if any --laser-x/y/z was given explicitly */
+  int laser_flip_x;
+  int laser_flip_y;
   int list_audio_devices;
 };
 
@@ -208,6 +210,8 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-x NUM          Output channel index for X (default: 0)\n"
       "  --laser-y NUM          Output channel index for Y (default: 1)\n"
       "  --laser-z NUM          Output channel index for Z/blank (default: 2)\n"
+      "  --laser-flip-x         Invert the X axis\n"
+      "  --laser-flip-y         Invert the Y axis\n"
       "  --list-audio-devices   List available audio output devices and exit\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -223,6 +227,8 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       {"laser-x", required_argument, NULL, 'x'},
       {"laser-y", required_argument, NULL, 'y'},
       {"laser-z", required_argument, NULL, 'z'},
+      {"laser-flip-x", no_argument, NULL, 'X'},
+      {"laser-flip-y", no_argument, NULL, 'Y'},
       {"list-audio-devices", no_argument, NULL, 'L'},
       {"help", no_argument, NULL, 'h'},
       {NULL, 0, NULL, 0}};
@@ -235,6 +241,8 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
   opts->laser_y_ch = 1;
   opts->laser_z_ch = 2;
   opts->laser_ch_set = 0;
+  opts->laser_flip_x = 0;
+  opts->laser_flip_y = 0;
   opts->list_audio_devices = 0;
 
   int c;
@@ -263,6 +271,12 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
     case 'z':
       opts->laser_z_ch = atoi(optarg);
       opts->laser_ch_set = 1;
+      break;
+    case 'X':
+      opts->laser_flip_x = 1;
+      break;
+    case 'Y':
+      opts->laser_flip_y = 1;
       break;
     case 'L':
       opts->list_audio_devices = 1;
@@ -351,7 +365,7 @@ int main(int argc, char *argv[]) {
   e8910_init_sound();
   if (opts.laser_device)
     laser_init(opts.laser_device, opts.laser_x_ch, opts.laser_y_ch,
-               opts.laser_z_ch);
+               opts.laser_z_ch, opts.laser_flip_x, opts.laser_flip_y);
   osint_emuloop();
   laser_done();
   e8910_done_sound();

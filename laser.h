@@ -6,8 +6,10 @@
  *                  Pass NULL to use the system default output device.
  *   x_ch, y_ch, z_ch — zero-based output channel indices for X, Y, Z/blank.
  *                  Defaults are 0, 1, 2.
+ *   flip_x, flip_y — non-zero to invert the respective axis.
  * The device's native sample rate is used automatically. */
-void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch);
+void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch,
+                int flip_x, int flip_y);
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().
