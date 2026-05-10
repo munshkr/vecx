@@ -1,4 +1,6 @@
 
+#include <getopt.h>
+
 #include "SDL.h"
 #include "SDL2_gfxPrimitives.h"
 #include "SDL_image.h"
@@ -38,10 +40,7 @@ void osint_render(void) {
   SDL_RenderPresent(renderer);
 }
 
-static char *romfilename = "rom.dat";
-static char *cartfilename = NULL;
-
-static void init() {
+static void init(const char *romfilename, const char *cartfilename) {
   FILE *f;
   if (!(f = fopen(romfilename, "rb"))) {
     perror(romfilename);
@@ -183,6 +182,77 @@ void osint_emuloop() {
   }
 }
 
+struct cli_options {
+  const char *rom;
+  const char *cart;
+  const char *overlay;
+  const char *laser_device;
+  const char *laser_map;
+};
+
+static void usage(const char *prog, int exitcode) {
+  fprintf(exitcode ? stderr : stdout,
+          "Usage: %s [OPTIONS]\n"
+          "\n"
+          "Options:\n"
+          "  --rom FILE           ROM file to load (default: rom.dat)\n"
+          "  --cart FILE          Cartridge ROM file\n"
+          "  --overlay FILE       Overlay BMP image file\n"
+          "  --laser-device DEV   Laser device path\n"
+          "  --laser-map MAP      Laser channel map string\n"
+          "  --help               Show this help and exit\n",
+          prog);
+  exit(exitcode);
+}
+
+static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
+  static const struct option long_opts[] = {
+      {"rom", required_argument, NULL, 'r'},
+      {"cart", required_argument, NULL, 'c'},
+      {"overlay", required_argument, NULL, 'o'},
+      {"laser-device", required_argument, NULL, 'd'},
+      {"laser-map", required_argument, NULL, 'm'},
+      {"help", no_argument, NULL, 'h'},
+      {NULL, 0, NULL, 0}};
+
+  opts->rom = "rom.dat";
+  opts->cart = NULL;
+  opts->overlay = NULL;
+  opts->laser_device = NULL;
+  opts->laser_map = NULL;
+
+  int c;
+  while ((c = getopt_long(argc, argv, "", long_opts, NULL)) != -1) {
+    switch (c) {
+    case 'r':
+      opts->rom = optarg;
+      break;
+    case 'c':
+      opts->cart = optarg;
+      break;
+    case 'o':
+      opts->overlay = optarg;
+      break;
+    case 'd':
+      opts->laser_device = optarg;
+      break;
+    case 'm':
+      opts->laser_map = optarg;
+      break;
+    case 'h':
+      usage(argv[0], 0);
+      break;
+    default:
+      usage(argv[0], 1);
+      break;
+    }
+  }
+  if (optind < argc) {
+    fprintf(stderr, "%s: unexpected argument '%s'\n", argv[0], argv[optind]);
+    usage(argv[0], 1);
+  }
+}
+
 void load_overlay(const char *filename) {
   SDL_Surface *image;
   image = SDL_LoadBMP(filename);
@@ -195,6 +265,9 @@ void load_overlay(const char *filename) {
 }
 
 int main(int argc, char *argv[]) {
+  struct cli_options opts;
+  parse_cli_options(argc, argv, &opts);
+
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
     fprintf(stderr, "Failed to initialize SDL: %s\n", SDL_GetError());
     exit(-1);
@@ -209,15 +282,13 @@ int main(int argc, char *argv[]) {
 
   resize(330 * 3 / 2, 410 * 3 / 2);
 
-  if (argc > 1)
-    cartfilename = argv[1];
-  if (argc > 2)
-    load_overlay(argv[2]);
+  if (opts.overlay)
+    load_overlay(opts.overlay);
 
-  init();
+  init(opts.rom, opts.cart);
 
   e8910_init_sound();
-  laser_init(argc > 3 ? argv[3] : NULL, argc > 4 ? argv[4] : NULL);
+  laser_init(opts.laser_device, opts.laser_map);
   osint_emuloop();
   laser_done();
   e8910_done_sound();
