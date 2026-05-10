@@ -291,20 +291,12 @@ static void list_audio_devices(void) {
   fprintf(stdout, "----  ------  --------  ----\n");
   for (int i = 0; i < n; i++) {
     const char *name = SDL_GetAudioDeviceName(i, 0);
-    SDL_AudioSpec req, given;
-    SDL_zero(req);
-    req.freq = 44100;
-    req.format = AUDIO_F32SYS;
-    req.channels = 2;
-    req.samples = 512;
-    SDL_AudioDeviceID dev =
-        SDL_OpenAudioDevice(name, 0, &req, &given, SDL_AUDIO_ALLOW_ANY_CHANGE);
-    if (dev != 0) {
-      fprintf(stdout, "%-4d  %-6d  %-8d  %s\n", i, given.freq, given.channels,
+    SDL_AudioSpec spec;
+    if (SDL_GetAudioDeviceSpec(i, 0, &spec) == 0) {
+      fprintf(stdout, "%-4d  %-6d  %-8d  %s\n", i, spec.freq, spec.channels,
               name);
-      SDL_CloseAudioDevice(dev);
     } else {
-      fprintf(stdout, "%-4d  %-6s  %-8s  %s (could not open: %s)\n", i, "?",
+      fprintf(stdout, "%-4d  %-6s  %-8s  %s (could not query: %s)\n", i, "?",
               "?", name, SDL_GetError());
     }
   }
