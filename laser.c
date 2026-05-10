@@ -97,7 +97,25 @@ void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch) {
     max_ch = laser_channel_map[2];
   req_channels = max_ch + 1;
 
-  req.freq = LASER_REQUESTED_FREQ;
+  /* Query the device's native sample rate so we request it directly.
+   * SDL_AUDIO_ALLOW_FREQUENCY_CHANGE does not force the native rate —
+   * CoreAudio will resample any rate we ask for, so given.freq just
+   * reflects what we requested.  Asking for the native rate avoids the
+   * resampler entirely. */
+  int native_freq = LASER_REQUESTED_FREQ;
+  if (device_name) {
+    int n = SDL_GetNumAudioDevices(0);
+    for (int i = 0; i < n; i++) {
+      if (SDL_strcmp(SDL_GetAudioDeviceName(i, 0), device_name) == 0) {
+        SDL_AudioSpec dev_spec;
+        if (SDL_GetAudioDeviceSpec(i, 0, &dev_spec) == 0)
+          native_freq = dev_spec.freq;
+        break;
+      }
+    }
+  }
+
+  req.freq = native_freq;
   req.format = AUDIO_F32SYS;
   req.channels = req_channels;
   req.samples = 512;
