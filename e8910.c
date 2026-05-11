@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SOUND_FREQ 22050
+#define SOUND_FREQ 44100
 #define SOUND_SAMPLE 1024
 
 /***************************************************************************
@@ -18,7 +18,7 @@
 
 ***************************************************************************/
 
-#define MAX_OUTPUT 0x0fff
+#define MAX_OUTPUT 0x7fff
 //#define MAX_OUTPUT 0x7f
 
 #define STEP3 1
@@ -225,7 +225,7 @@ static void e8910_callback(void *userdata, Uint8 *stream, int length) {
   (void)userdata;
 
   int outn;
-  Uint8 *buf1 = stream;
+  Sint16 *buf1 = (Sint16 *)stream;
 
   /* hack to prevent us from hanging when starting filtered outputs */
   if (!PSG.ready) {
@@ -233,7 +233,9 @@ static void e8910_callback(void *userdata, Uint8 *stream, int length) {
     return;
   }
 
-  length = length * 2;
+  /* For AUDIO_S16, length is already in bytes (2 bytes/sample),
+     so byte_count == 2 * num_samples, which is the tick budget the
+     timing loop expects without any further scaling. */
 
   /* The 8910 has three outputs, each output is the mix of one of the three */
   /* tone generators and of the (single) noise generator. The two are mixed */
@@ -468,7 +470,7 @@ static void e8910_callback(void *userdata, Uint8 *stream, int length) {
 
     vol = (vola * PSG.VolA + volb * PSG.VolB + volc * PSG.VolC) / (3 * STEP);
     if (--length & 1)
-      *(buf1++) = vol >> 8;
+      *(buf1++) = (Sint16)vol;
   }
 }
 
@@ -506,7 +508,7 @@ void e8910_init_sound() {
 
   // set up audio buffering
   reqSpec.freq = SOUND_FREQ;      // Audio frequency in samples per second
-  reqSpec.format = AUDIO_U8;      // Audio data format
+  reqSpec.format = AUDIO_S16SYS;  // Audio data format
   reqSpec.channels = 1;           // Number of channels: 1 mono, 2 stereo
   reqSpec.samples = SOUND_SAMPLE; // Audio buffer size in samples
   reqSpec.callback =
