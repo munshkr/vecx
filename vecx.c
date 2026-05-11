@@ -198,7 +198,7 @@ einline void int_update(void) {
 }
 
 unsigned char read8(unsigned address) {
-  unsigned char data;
+  unsigned char data = 0xff;
 
   if ((address & 0xe000) == 0xe000) {
     /* rom */
@@ -755,7 +755,7 @@ einline void via_sstep1(void) {
 }
 
 einline void alg_addline(long x0, long y0, long x1, long y1,
-                                unsigned char color) {
+                         unsigned char color) {
   unsigned long key;
   long index;
 
