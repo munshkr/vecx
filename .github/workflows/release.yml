@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version string for artifact naming (e.g. v1.0.0-test)"
+        required: false
+        default: "test"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libsdl2-dev libsdl2-gfx-dev libsdl2-image-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sdl2 sdl2_gfx sdl2_image
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-SDL2_gfx
+            mingw-w64-ucrt-x86_64-SDL2_image
+
+      - name: Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: make
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: make
+
+      - name: Smoke test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ./vecx --help
+
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: ./vecx.exe --help
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bundle runtime DLLs (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          ldd vecx.exe \
+            | grep '/ucrt64/bin/' \
+            | awk '{print $3}' \
+            | xargs -I{} cp {} .
+
+      - name: Package (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          tar -czf "vecx-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz" \
+            vecx rom.dat README.md LICENSE.md
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dlls = (Get-ChildItem *.dll).Name
+          $files = @('vecx.exe', 'rom.dat', 'README.md', 'LICENSE.md') + $dlls
+          Compress-Archive -Path $files `
+            -DestinationPath "vecx-${{ steps.version.outputs.value }}-windows.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vecx-${{ matrix.platform }}
+          path: vecx-*-${{ matrix.platform }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    # Only publish a GitHub Release when triggered by a real version tag push.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

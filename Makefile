@@ -1,8 +1,9 @@
 
+EXEEXT := $(if $(filter Windows_NT,$(OS)),.exe,)
+TARGET := vecx$(EXEEXT)
 CFLAGS := -O3 -Wall -Wextra $(shell sdl2-config --cflags)
-LIBS := $(shell sdl2-config --libs) -lSDL2_gfx
+LIBS := $(shell sdl2-config --libs) -lSDL2_gfx -lSDL2_image
 OBJECTS := e6809.o e8910.o laser.o osint.o vecx.o
-TARGET := vecx
 CLEANFILES := $(TARGET) $(OBJECTS)
 
 $(TARGET): $(OBJECTS)

@@ -100,6 +100,21 @@ If the projected image is mirrored, use `--laser-flip-x` and/or `--laser-flip-y`
 > **Note**: if the emulator stalls and the audio buffer empties, the laser
 > output automatically parks at centre position with the beam off.
 
+Releases
+--------
+
+Prebuilt binaries for Linux, macOS, and Windows are published automatically
+when a version tag is pushed. On Windows the required SDL2 runtime DLLs are
+bundled alongside the executable.
+
+Download the latest release from the [Releases page](../../releases), or
+publish one by pushing a version tag:
+
+```
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 Authors
 -------
 
