@@ -1,10 +1,7 @@
-#include "SDL.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define SOUND_FREQ 44100
-#define SOUND_SAMPLE 1024
 
 /***************************************************************************
 
@@ -221,21 +218,20 @@ just a smoother curve, we always use the YM2149 behaviour.
   }
 }
 
-static void e8910_callback(void *userdata, Uint8 *stream, int length) {
-  (void)userdata;
-
+/* Synthesise num_samples mono S16 PCM samples into buf.
+ * Called from the unified audio callback in laser.c.
+ * STEP2 expands to the local `length` variable (= num_samples * 2),
+ * which is the tick budget the inner loop relies on. */
+void e8910_fill_samples(int16_t *buf, int num_samples) {
   int outn;
-  Sint16 *buf1 = (Sint16 *)stream;
+  int16_t *buf1 = buf;
+  int length = num_samples * 2;
 
-  /* hack to prevent us from hanging when starting filtered outputs */
+  /* Output silence until PSG is initialised. */
   if (!PSG.ready) {
-    memset(stream, 0, length * sizeof(*stream));
+    memset(buf, 0, (size_t)num_samples * sizeof(int16_t));
     return;
   }
-
-  /* For AUDIO_S16, length is already in bytes (2 bytes/sample),
-     so byte_count == 2 * num_samples, which is the tick budget the
-     timing loop expects without any further scaling. */
 
   /* The 8910 has three outputs, each output is the mix of one of the three */
   /* tone generators and of the (single) noise generator. The two are mixed */
@@ -470,7 +466,7 @@ static void e8910_callback(void *userdata, Uint8 *stream, int length) {
 
     vol = (vola * PSG.VolA + volb * PSG.VolB + volc * PSG.VolC) / (3 * STEP);
     if (--length & 1)
-      *(buf1++) = (Sint16)vol;
+      *(buf1++) = (int16_t)vol;
   }
 }
 
@@ -492,11 +488,7 @@ static void e8910_build_mixer_table() {
 
 extern unsigned snd_regs[16];
 
-void e8910_init_sound() {
-  // SDL audio stuff
-  SDL_AudioSpec reqSpec;
-  SDL_AudioSpec givenSpec;
-
+void e8910_init(void) {
   PSG.Regs = snd_regs;
   PSG.RNG = 1;
   PSG.OutputA = 0;
@@ -505,27 +497,4 @@ void e8910_init_sound() {
   PSG.OutputN = 0xff;
   e8910_build_mixer_table();
   PSG.ready = 1;
-
-  // set up audio buffering
-  reqSpec.freq = SOUND_FREQ;      // Audio frequency in samples per second
-  reqSpec.format = AUDIO_S16SYS;  // Audio data format
-  reqSpec.channels = 1;           // Number of channels: 1 mono, 2 stereo
-  reqSpec.samples = SOUND_SAMPLE; // Audio buffer size in samples
-  reqSpec.callback =
-      e8910_callback; // Callback function for filling the audio buffer
-  reqSpec.userdata = NULL;
-  /* Open the audio device */
-  if (SDL_OpenAudio(&reqSpec, &givenSpec) < 0) {
-    fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
-    exit(-1);
-  }
-
-#if 0
-	fprintf(stdout, "samples:%d format=%x freq=%d\n", givenSpec.samples, givenSpec.format, givenSpec.freq);
-#endif
-
-  // Start playing audio
-  SDL_PauseAudio(0);
 }
-
-void e8910_done_sound() { SDL_CloseAudio(); }

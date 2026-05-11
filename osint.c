@@ -187,11 +187,12 @@ struct cli_options {
   const char *rom;
   const char *cart;
   const char *overlay;
-  const char *laser_device;
+  const char *device;
+  int audio_l_ch;
+  int audio_r_ch;
   int laser_x_ch;
   int laser_y_ch;
   int laser_z_ch;
-  int laser_ch_set; /* non-zero if any --laser-x/y/z was given explicitly */
   int laser_flip_x;
   int laser_flip_y;
   int list_audio_devices;
@@ -206,12 +207,14 @@ static void usage(const char *prog, int exitcode) {
       "  --rom FILE             ROM file to load (default: rom.dat)\n"
       "  --cart FILE            Cartridge ROM file\n"
       "  --overlay FILE         Overlay BMP image file\n"
-      "  --laser-device DEV     Audio-to-ILDA device name\n"
-      "  --laser-x NUM          Output channel index for X (default: 0)\n"
-      "  --laser-y NUM          Output channel index for Y (default: 1)\n"
-      "  --laser-z NUM          Output channel index for Z/blank (default: 2)\n"
-      "  --laser-flip-x         Invert the X axis\n"
-      "  --laser-flip-y         Invert the Y axis\n"
+      "  --device DEV           Audio output device (default: system default)\n"
+      "  --audio-l NUM          PSG left  channel index (default: 0)\n"
+      "  --audio-r NUM          PSG right channel index (default: 1)\n"
+      "  --laser-x NUM          Laser X channel index (default: 2)\n"
+      "  --laser-y NUM          Laser Y channel index (default: 3)\n"
+      "  --laser-z NUM          Laser Z/blank channel index (default: 4)\n"
+      "  --laser-flip-x         Invert the laser X axis\n"
+      "  --laser-flip-y         Invert the laser Y axis\n"
       "  --list-audio-devices   List available audio output devices and exit\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -223,7 +226,9 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       {"rom", required_argument, NULL, 'r'},
       {"cart", required_argument, NULL, 'c'},
       {"overlay", required_argument, NULL, 'o'},
-      {"laser-device", required_argument, NULL, 'd'},
+      {"device", required_argument, NULL, 'D'},
+      {"audio-l", required_argument, NULL, 'l'},
+      {"audio-r", required_argument, NULL, 'R'},
       {"laser-x", required_argument, NULL, 'x'},
       {"laser-y", required_argument, NULL, 'y'},
       {"laser-z", required_argument, NULL, 'z'},
@@ -236,11 +241,12 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
   opts->rom = "rom.dat";
   opts->cart = NULL;
   opts->overlay = NULL;
-  opts->laser_device = NULL;
-  opts->laser_x_ch = 0;
-  opts->laser_y_ch = 1;
-  opts->laser_z_ch = 2;
-  opts->laser_ch_set = 0;
+  opts->device = NULL;
+  opts->audio_l_ch = 0;
+  opts->audio_r_ch = 1;
+  opts->laser_x_ch = 2;
+  opts->laser_y_ch = 3;
+  opts->laser_z_ch = 4;
   opts->laser_flip_x = 0;
   opts->laser_flip_y = 0;
   opts->list_audio_devices = 0;
@@ -257,20 +263,23 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
     case 'o':
       opts->overlay = optarg;
       break;
-    case 'd':
-      opts->laser_device = optarg;
+    case 'D':
+      opts->device = optarg;
+      break;
+    case 'l':
+      opts->audio_l_ch = atoi(optarg);
+      break;
+    case 'R':
+      opts->audio_r_ch = atoi(optarg);
       break;
     case 'x':
       opts->laser_x_ch = atoi(optarg);
-      opts->laser_ch_set = 1;
       break;
     case 'y':
       opts->laser_y_ch = atoi(optarg);
-      opts->laser_ch_set = 1;
       break;
     case 'z':
       opts->laser_z_ch = atoi(optarg);
-      opts->laser_ch_set = 1;
       break;
     case 'X':
       opts->laser_flip_x = 1;
@@ -331,12 +340,6 @@ int main(int argc, char *argv[]) {
   struct cli_options opts;
   parse_cli_options(argc, argv, &opts);
 
-  if (opts.laser_ch_set && !opts.laser_device) {
-    fprintf(stderr, "%s: --laser-x/y/z have no effect without --laser-device\n",
-            argv[0]);
-    exit(1);
-  }
-
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
     fprintf(stderr, "Failed to initialize SDL: %s\n", SDL_GetError());
     exit(-1);
@@ -362,13 +365,12 @@ int main(int argc, char *argv[]) {
 
   init(opts.rom, opts.cart);
 
-  e8910_init_sound();
-  if (opts.laser_device)
-    laser_init(opts.laser_device, opts.laser_x_ch, opts.laser_y_ch,
-               opts.laser_z_ch, opts.laser_flip_x, opts.laser_flip_y);
+  e8910_init();
+  laser_init(opts.device, opts.audio_l_ch, opts.audio_r_ch, opts.laser_x_ch,
+             opts.laser_y_ch, opts.laser_z_ch, opts.laser_flip_x,
+             opts.laser_flip_y);
   osint_emuloop();
   laser_done();
-  e8910_done_sound();
   SDL_Quit();
 
   return 0;

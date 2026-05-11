@@ -2,8 +2,8 @@ vecx
 ====
 
 This is a fork of [jhawthorn/vecx](https://github.com/jhawthorn/vecx), a Vectrex
-emulator. It mainly adds real laser projector output for an audio-to-ILDA
-interface, improved CLI parsing and miscellaneous fixes.
+emulator. It adds real laser projector output via an audio-to-ILDA interface,
+improved CLI parsing, and miscellaneous fixes.
 
 ![Vectrex Loading Screen](screenshot0.png) ![Star Trek](screenshot1.png)
 
@@ -22,12 +22,14 @@ Options:
   --rom FILE             ROM file to load (default: rom.dat)
   --cart FILE            Cartridge ROM file
   --overlay FILE         Overlay BMP image file
-  --laser-device DEV     Audio-to-ILDA device name
-  --laser-x NUM          Output channel index for X (default: 0)
-  --laser-y NUM          Output channel index for Y (default: 1)
-  --laser-z NUM          Output channel index for Z/blank (default: 2)
-  --laser-flip-x         Invert the X axis
-  --laser-flip-y         Invert the Y axis
+  --device DEV           Audio output device (default: system default)
+  --audio-l NUM          PSG left  channel index (default: 0)
+  --audio-r NUM          PSG right channel index (default: 1)
+  --laser-x NUM          Laser X channel index (default: 2)
+  --laser-y NUM          Laser Y channel index (default: 3)
+  --laser-z NUM          Laser Z/blank channel index (default: 4)
+  --laser-flip-x         Invert the laser X axis
+  --laser-flip-y         Invert the laser Y axis
   --list-audio-devices   List available audio output devices and exit
   --help                 Show this help and exit
 ```
@@ -38,52 +40,65 @@ Examples:
 ./vecx --rom rom.dat --cart mygame.bin
 ./vecx --rom rom.dat --cart mygame.bin --overlay overlay.bmp
 ./vecx --list-audio-devices
-./vecx --rom rom.dat --cart mygame.bin --laser-device "DAC Name"
+./vecx --rom rom.dat --cart mygame.bin --device "MacBook Pro Speakers"
+./vecx --rom rom.dat --cart mygame.bin --device "BlackHole 64ch" --laser-flip-y
+```
+
+Audio Output
+------------
+
+Game audio (AY-3-8910 PSG) is always output through the selected device.
+By default it is sent to channels 0 (left) and 1 (right). Override with
+`--audio-l` and `--audio-r`.
+
+To list available devices:
+
+```
+./vecx --list-audio-devices
 ```
 
 Laser Output
 ------------
 
-vecx drives a laser projector by outputting X, Y, and blanking signals as a
-3-channel audio stream to an audio-to-ILDA interface.
+vecx drives a laser projector by outputting X, Y, and blanking signals as part
+of a multi-channel audio stream to an audio-to-ILDA interface.
 
-The interface must appear to the OS as a standard multi-channel audio output
-device. vecx uses the device's native sample rate automatically (44.1 kHz or
-96 kHz).
+All signals — game audio and laser XYZ — are multiplexed onto a **single audio
+device**. The device must appear to the OS as a standard multi-channel audio
+output device. vecx uses the device's native sample rate automatically.
 
-Channel assignment (default: X=0, Y=1, Z=2):
+Default channel layout:
 
-| Channel | Signal  | Description                     |
-| ------- | ------- | ------------------------------- |
-| 0       | X       | Horizontal beam position        |
-| 1       | Y       | Vertical beam position          |
-| 2       | Z/blank | +1.0 = beam on, −1.0 = beam off |
+| Channel | Signal    | Description                     |
+| ------- | --------- | ------------------------------- |
+| 0       | Audio L   | PSG game audio left             |
+| 1       | Audio R   | PSG game audio right            |
+| 2       | X         | Horizontal beam position        |
+| 3       | Y         | Vertical beam position          |
+| 4       | Z / blank | +1.0 = beam on, −1.0 = beam off |
 
 All signals are normalised to [−1.0, +1.0] (float32). Use the device name
-exactly as it appears in your OS audio settings:
+exactly as reported by `--list-audio-devices`:
 
 ```
-./vecx --rom rom.dat --cart mygame.bin --laser-device "DAC-ILDA"
-./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-x 0 --laser-y 1 --laser-z 2
+./vecx --rom rom.dat --cart mygame.bin --device "BlackHole 64ch"
 ```
 
-If your interface uses a different channel order, override with `--laser-x`,
-`--laser-y`, and `--laser-z`. For example, if Z/blank is on channel 3:
+Override any channel assignment:
 
 ```
-./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-z 3
+./vecx --device "BlackHole 64ch" --audio-l 0 --audio-r 1 --laser-x 2 --laser-y 3 --laser-z 4
 ```
 
-If the projected image is mirrored, use `--laser-flip-x` and/or `--laser-flip-y`
-to invert the respective axis:
+If the projected image is mirrored, use `--laser-flip-x` and/or `--laser-flip-y`:
 
 ```
-./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-flip-y
-./vecx --rom rom.dat --laser-device "DAC-ILDA" --laser-flip-x --laser-flip-y
+./vecx --device "BlackHole 64ch" --laser-flip-y
+./vecx --device "BlackHole 64ch" --laser-flip-x --laser-flip-y
 ```
 
-> **Note**: if the emulator stalls and the audio buffer empties, the output
-> automatically parks at centre position with the beam off.
+> **Note**: if the emulator stalls and the audio buffer empties, the laser
+> output automatically parks at centre position with the beam off.
 
 Authors
 -------

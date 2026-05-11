@@ -1,5 +1,6 @@
 #include "laser.h"
 #include "SDL.h"
+#include "e8910.h"
 #include "vecx.h"
 #include <stdio.h>
 
@@ -26,11 +27,16 @@ static SDL_atomic_t laser_head; /* next write slot  */
 static SDL_atomic_t laser_tail; /* next read  slot  */
 
 static SDL_AudioDeviceID laser_device_id = 0;
-static int laser_channels = 3;
+static int laser_channels = 5;
 /* channel_map[0/1/2] = which output channel index receives X/Y/Z */
-static int laser_channel_map[3] = {0, 1, 2};
+static int laser_channel_map[3] = {2, 3, 4};
 static int laser_flip_x = 0;
 static int laser_flip_y = 0;
+/* Audio (PSG) channel assignments. */
+static int laser_audio_l_ch = 0;
+static int laser_audio_r_ch = 1;
+/* Set once laser_init knows the real channel count; gates laser_push. */
+static int laser_xyz_enabled = 0;
 
 /* DDA accumulator for integer-ratio downsampling from VECTREX_MHZ to the
  * actual device frequency.  laser_dda_rate is the device sample rate. */
@@ -38,16 +44,38 @@ static unsigned laser_dda_accum = 0;
 static unsigned laser_dda_rate = LASER_REQUESTED_FREQ;
 
 /* -------------------------------------------------------------------------
- * Audio callback — runs in the SDL audio thread.
+ * Unified audio callback — PSG audio + laser XYZ in one device.
+ * Runs in the SDL audio thread.
  * ------------------------------------------------------------------------- */
-static void laser_callback(void *userdata, Uint8 *stream, int len) {
+
+/* Scratch buffer for PSG synthesis — sized for the largest callback burst.
+ * 4096 frames @ 44100 Hz ≈ 93 ms; SDL typically requests 512–1024. */
+#define PSG_BUF_FRAMES 4096
+
+static void unified_callback(void *userdata, Uint8 *stream, int len) {
   float *out = (float *)(void *)stream;
-  int nframes = len / (laser_channels * (int)sizeof(float));
   int ch = laser_channels;
+  int nframes = len / (ch * (int)sizeof(float));
+  int fill = nframes < PSG_BUF_FRAMES ? nframes : PSG_BUF_FRAMES;
+  int16_t psg_buf[PSG_BUF_FRAMES];
 
   (void)userdata;
 
+  e8910_fill_samples(psg_buf, fill);
+
   for (int i = 0; i < nframes; i++) {
+    /* Zero the full frame first. */
+    for (int c = 0; c < ch; c++)
+      out[i * ch + c] = 0.0f;
+
+    /* PSG audio — mono source mapped to L and R channels. */
+    float psg = (i < fill) ? psg_buf[i] / 32768.0f : 0.0f;
+    if (laser_audio_l_ch < ch)
+      out[i * ch + laser_audio_l_ch] = psg;
+    if (laser_audio_r_ch >= 0 && laser_audio_r_ch < ch)
+      out[i * ch + laser_audio_r_ch] = psg;
+
+    /* Laser XYZ from ring buffer. */
     int head = SDL_AtomicGet(&laser_head);
     int tail = SDL_AtomicGet(&laser_tail);
     float x, y, z;
@@ -65,11 +93,6 @@ static void laser_callback(void *userdata, Uint8 *stream, int len) {
       SDL_AtomicSet(&laser_tail, (tail + 1) & LASER_RING_MASK);
     }
 
-    /* Zero the full frame, then place signals at the mapped channel indices.
-     * This handles any channel count the device negotiated (e.g. 4 on macOS).
-     */
-    for (int c = 0; c < ch; c++)
-      out[i * ch + c] = 0.0f;
     if (laser_channel_map[0] < ch)
       out[i * ch + laser_channel_map[0]] = x;
     if (laser_channel_map[1] < ch)
@@ -82,12 +105,14 @@ static void laser_callback(void *userdata, Uint8 *stream, int len) {
 /* -------------------------------------------------------------------------
  * Public API
  * ------------------------------------------------------------------------- */
-void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch,
-                int flip_x, int flip_y) {
+void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
+                int x_ch, int y_ch, int z_ch, int flip_x, int flip_y) {
   SDL_AudioSpec req, given;
-  int req_channels, max_ch;
+  int max_ch;
   SDL_zero(req);
 
+  laser_audio_l_ch = audio_l_ch;
+  laser_audio_r_ch = audio_r_ch;
   laser_channel_map[0] = x_ch;
   laser_channel_map[1] = y_ch;
   laser_channel_map[2] = z_ch;
@@ -95,12 +120,15 @@ void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch,
   laser_flip_y = flip_y;
 
   /* Determine how many channels the device must provide. */
-  max_ch = laser_channel_map[0];
+  max_ch = audio_l_ch;
+  if (audio_r_ch > max_ch)
+    max_ch = audio_r_ch;
+  if (laser_channel_map[0] > max_ch)
+    max_ch = laser_channel_map[0];
   if (laser_channel_map[1] > max_ch)
     max_ch = laser_channel_map[1];
   if (laser_channel_map[2] > max_ch)
     max_ch = laser_channel_map[2];
-  req_channels = max_ch + 1;
 
   /* Query the device's native sample rate so we request it directly.
    * SDL_AUDIO_ALLOW_FREQUENCY_CHANGE does not force the native rate —
@@ -122,9 +150,9 @@ void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch,
 
   req.freq = native_freq;
   req.format = AUDIO_F32SYS;
-  req.channels = req_channels;
+  req.channels = max_ch + 1;
   req.samples = 512;
-  req.callback = laser_callback;
+  req.callback = unified_callback;
   req.userdata = NULL;
 
   /* Allow the driver to adjust channel count (e.g. macOS rounds to 4) and
@@ -143,18 +171,23 @@ void laser_init(const char *device_name, int x_ch, int y_ch, int z_ch,
   laser_dda_rate = (unsigned)given.freq;
 
   fprintf(stdout,
-          "laser: opened '%s' — %d Hz, %d ch, fmt 0x%04x, "
-          "map X=%d Y=%d Z=%d\n",
+          "output: opened '%s' — %d Hz, %d ch, fmt 0x%04x\n"
+          "        audio L=%d R=%d  laser X=%d Y=%d Z=%d\n",
           device_name ? device_name : "(default)", given.freq, given.channels,
-          given.format, laser_channel_map[0], laser_channel_map[1],
-          laser_channel_map[2]);
+          given.format, laser_audio_l_ch, laser_audio_r_ch,
+          laser_channel_map[0], laser_channel_map[1], laser_channel_map[2]);
 
-  if (given.channels < req_channels) {
+  if (given.channels < max_ch + 1) {
     fprintf(stderr,
-            "laser: WARNING — device gave %d channel(s), need %d; "
+            "output: WARNING — device gave %d channel(s), need %d; "
             "some signals may be missing\n",
-            given.channels, req_channels);
+            given.channels, max_ch + 1);
   }
+
+  /* Laser XYZ is active only when all three channels fit in the device. */
+  laser_xyz_enabled = (laser_channel_map[0] < laser_channels) &&
+                      (laser_channel_map[1] < laser_channels) &&
+                      (laser_channel_map[2] < laser_channels);
 
   SDL_AtomicSet(&laser_head, 0);
   SDL_AtomicSet(&laser_tail, 0);
@@ -174,7 +207,7 @@ void laser_push(long x, long y, unsigned blank) {
   int head, next_head, tail;
   float fx, fy, fz;
 
-  if (laser_device_id == 0)
+  if (!laser_xyz_enabled)
     return;
 
   /* DDA downsampling: accumulate device_rate per Vectrex tick; emit one
