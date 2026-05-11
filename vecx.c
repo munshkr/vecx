@@ -5,7 +5,7 @@
 #include "osint.h"
 #include <stdio.h>
 
-#define einline static __inline
+#define einline static inline
 
 unsigned char rom[8192];
 unsigned char cart[32768];
@@ -101,7 +101,7 @@ static long fcycles;
 
 /* update the snd chips internal registers when via_ora/via_orb changes */
 
-static einline void snd_update(void) {
+einline void snd_update(void) {
   switch (via_orb & 0x18) {
   case 0x00:
     /* the sound chip is disabled */
@@ -131,7 +131,7 @@ static einline void snd_update(void) {
 
 /* update the various analog values when orb is written. */
 
-static einline void alg_update(void) {
+einline void alg_update(void) {
   switch (via_orb & 0x06) {
   case 0x00:
     alg_jsh = alg_jch0;
@@ -189,7 +189,7 @@ static einline void alg_update(void) {
  * ifr.
  */
 
-static einline void int_update(void) {
+einline void int_update(void) {
   if ((via_ifr & 0x7f) & (via_ier & 0x7f)) {
     via_ifr |= 0x80;
   } else {
@@ -599,7 +599,7 @@ void vecx_reset(void) {
  * via_sstep0 is the first postion of the emulation.
  */
 
-static einline void via_sstep0(void) {
+einline void via_sstep0(void) {
   unsigned t2shift;
 
   if (via_t1on) {
@@ -736,7 +736,7 @@ static einline void via_sstep0(void) {
 
 /* perform the second part of the via emulation */
 
-static einline void via_sstep1(void) {
+einline void via_sstep1(void) {
   if ((via_pcr & 0x0e) == 0x0a) {
     /* if ca2 is in pulse mode, then make sure
      * it gets restored to '1' after the pulse.
@@ -754,7 +754,7 @@ static einline void via_sstep1(void) {
   }
 }
 
-static einline void alg_addline(long x0, long y0, long x1, long y1,
+einline void alg_addline(long x0, long y0, long x1, long y1,
                                 unsigned char color) {
   unsigned long key;
   long index;
@@ -798,7 +798,7 @@ static einline void alg_addline(long x0, long y0, long x1, long y1,
 
 /* perform a single cycle worth of analog emulation */
 
-static einline void alg_sstep(void) {
+einline void alg_sstep(void) {
   long sig_dx, sig_dy;
   unsigned sig_ramp;
   unsigned sig_blank;
