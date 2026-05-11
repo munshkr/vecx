@@ -30,7 +30,7 @@ jobs:
             platform: windows
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -108,7 +108,7 @@ jobs:
             -DestinationPath "vecx-${{ steps.version.outputs.value }}-windows.zip"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: vecx-${{ matrix.platform }}
           path: vecx-*-${{ matrix.platform }}.*
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           merge-multiple: true
           path: artifacts
