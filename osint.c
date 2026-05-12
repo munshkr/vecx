@@ -198,6 +198,123 @@ struct cli_options {
   int list_audio_devices;
 };
 
+static void set_default_options(struct cli_options *opts) {
+  opts->rom = "rom.dat";
+  opts->cart = NULL;
+  opts->overlay = NULL;
+  opts->device = NULL;
+  opts->audio_l_ch = 0;
+  opts->audio_r_ch = 1;
+  opts->laser_x_ch = 2;
+  opts->laser_y_ch = 3;
+  opts->laser_z_ch = 4;
+  opts->laser_flip_x = 0;
+  opts->laser_flip_y = 0;
+  opts->list_audio_devices = 0;
+}
+
+static const char *find_config_path(int argc, char **argv) {
+  for (int i = 1; i < argc; i++) {
+    const char *arg = argv[i];
+    if (strncmp(arg, "--config=", 9) == 0)
+      return arg + 9;
+    if (strcmp(arg, "--config") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "%s: option '--config' requires an argument\n",
+                argv[0]);
+        exit(EXIT_FAILURE);
+      }
+      return argv[i + 1];
+    }
+  }
+  return NULL;
+}
+
+static void load_config_file(const char *path, struct cli_options *opts,
+                             const char *prog) {
+  FILE *f = fopen(path, "r");
+  if (!f) {
+    perror(path);
+    exit(EXIT_FAILURE);
+  }
+
+  char line[512];
+  int lineno = 0;
+  while (fgets(line, sizeof(line), f)) {
+    lineno++;
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+      line[--len] = '\0';
+    if (len == 0 || line[0] == '#')
+      continue;
+    char *eq = strchr(line, '=');
+    if (!eq) {
+      fprintf(stderr, "%s: %s:%d: expected 'key=value'\n", prog, path, lineno);
+      fclose(f);
+      exit(EXIT_FAILURE);
+    }
+    *eq = '\0';
+    char *key = line;
+    char *val = eq + 1;
+    size_t klen = strlen(key);
+    while (klen > 0 && (key[klen - 1] == ' ' || key[klen - 1] == '\t'))
+      key[--klen] = '\0';
+    while (*val == ' ' || *val == '\t')
+      val++;
+    if (strcmp(key, "rom") == 0) {
+      opts->rom = strdup(val);
+    } else if (strcmp(key, "cart") == 0) {
+      opts->cart = strdup(val);
+    } else if (strcmp(key, "overlay") == 0) {
+      opts->overlay = strdup(val);
+    } else if (strcmp(key, "device") == 0) {
+      opts->device = strdup(val);
+    } else if (strcmp(key, "audio-l") == 0) {
+      opts->audio_l_ch = atoi(val);
+    } else if (strcmp(key, "audio-r") == 0) {
+      opts->audio_r_ch = atoi(val);
+    } else if (strcmp(key, "laser-x") == 0) {
+      opts->laser_x_ch = atoi(val);
+    } else if (strcmp(key, "laser-y") == 0) {
+      opts->laser_y_ch = atoi(val);
+    } else if (strcmp(key, "laser-z") == 0) {
+      opts->laser_z_ch = atoi(val);
+    } else if (strcmp(key, "laser-flip-x") == 0) {
+      if (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 ||
+          strcmp(val, "yes") == 0)
+        opts->laser_flip_x = 1;
+      else if (strcmp(val, "false") == 0 || strcmp(val, "0") == 0 ||
+               strcmp(val, "no") == 0)
+        opts->laser_flip_x = 0;
+      else {
+        fprintf(stderr, "%s: %s:%d: invalid value for 'laser-flip-x': '%s'\n",
+                prog, path, lineno, val);
+        fclose(f);
+        exit(EXIT_FAILURE);
+      }
+    } else if (strcmp(key, "laser-flip-y") == 0) {
+      if (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 ||
+          strcmp(val, "yes") == 0)
+        opts->laser_flip_y = 1;
+      else if (strcmp(val, "false") == 0 || strcmp(val, "0") == 0 ||
+               strcmp(val, "no") == 0)
+        opts->laser_flip_y = 0;
+      else {
+        fprintf(stderr, "%s: %s:%d: invalid value for 'laser-flip-y': '%s'\n",
+                prog, path, lineno, val);
+        fclose(f);
+        exit(EXIT_FAILURE);
+      }
+    } else {
+      fprintf(stderr, "%s: %s:%d: unknown option '%s'\n", prog, path, lineno,
+              key);
+      fclose(f);
+      exit(EXIT_FAILURE);
+    }
+  }
+  fclose(f);
+}
+
 static void usage(const char *prog, int exitcode) {
   fprintf(
       exitcode ? stderr : stdout,
@@ -216,6 +333,7 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-flip-x         Invert the laser X axis\n"
       "  --laser-flip-y         Invert the laser Y axis\n"
       "  --list-audio-devices   List available audio output devices and exit\n"
+      "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);
   exit(exitcode);
@@ -233,19 +351,6 @@ static const char *require_arg(const char *name, int *i, int argc, char **argv,
 }
 
 static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
-  opts->rom = "rom.dat";
-  opts->cart = NULL;
-  opts->overlay = NULL;
-  opts->device = NULL;
-  opts->audio_l_ch = 0;
-  opts->audio_r_ch = 1;
-  opts->laser_x_ch = 2;
-  opts->laser_y_ch = 3;
-  opts->laser_z_ch = 4;
-  opts->laser_flip_x = 0;
-  opts->laser_flip_y = 0;
-  opts->list_audio_devices = 0;
-
   for (int i = 1; i < argc; i++) {
     const char *arg = argv[i];
     if (strncmp(arg, "--", 2) != 0) {
@@ -289,6 +394,9 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       opts->laser_flip_x = 1;
     } else if (strcmp(name, "laser-flip-y") == 0) {
       opts->laser_flip_y = 1;
+    } else if (strcmp(name, "config") == 0) {
+      require_arg(name, &i, argc, argv,
+                  val); /* already processed; skip value */
     } else if (strcmp(name, "list-audio-devices") == 0) {
       opts->list_audio_devices = 1;
     } else if (strcmp(name, "help") == 0) {
@@ -334,6 +442,19 @@ void load_overlay(const char *filename) {
 
 int main(int argc, char *argv[]) {
   struct cli_options opts;
+  set_default_options(&opts);
+
+  const char *cfg_path = find_config_path(argc, argv);
+  if (cfg_path) {
+    load_config_file(cfg_path, &opts, argv[0]);
+  } else {
+    FILE *probe = fopen("vecx.cfg", "r");
+    if (probe) {
+      fclose(probe);
+      load_config_file("vecx.cfg", &opts, argv[0]);
+    }
+  }
+
   parse_cli_options(argc, argv, &opts);
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {

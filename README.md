@@ -31,6 +31,7 @@ Options:
   --laser-flip-x         Invert the laser X axis
   --laser-flip-y         Invert the laser Y axis
   --list-audio-devices   List available audio output devices and exit
+  --config FILE          Load configuration from FILE
   --help                 Show this help and exit
 ```
 
@@ -42,6 +43,40 @@ Examples:
 ./vecx --list-audio-devices
 ./vecx --rom rom.dat --cart mygame.bin --device "MacBook Pro Speakers"
 ./vecx --rom rom.dat --cart mygame.bin --device "BlackHole 64ch" --laser-flip-y
+./vecx --config mysetup.cfg
+```
+
+Configuration File
+------------------
+
+All options can be set in a `key=value` text file instead of (or in addition
+to) the command line. CLI flags always override config file values.
+
+**Discovery order:**
+1. If `--config FILE` is given, that file is loaded (required to exist).
+2. Otherwise, `vecx.cfg` in the current working directory is loaded if present.
+
+**Format:**
+- One `key=value` per line.
+- Lines starting with `#` are comments; blank lines are ignored.
+- Keys are the option names without the leading `--`.
+- Boolean options (`laser-flip-x`, `laser-flip-y`) accept `true`/`false`,
+  `1`/`0`, or `yes`/`no`.
+
+Example `vecx.cfg`:
+
+```
+# vecx configuration
+rom=rom.dat
+cart=mygame.bin
+overlay=overlay.bmp
+device=BlackHole 64ch
+audio-l=0
+audio-r=1
+laser-x=2
+laser-y=3
+laser-z=4
+laser-flip-y=true
 ```
 
 Audio Output
