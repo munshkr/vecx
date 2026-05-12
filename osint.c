@@ -195,7 +195,6 @@ struct cli_options {
   int laser_z_ch;
   int laser_flip_x;
   int laser_flip_y;
-  int list_audio_devices;
 };
 
 static void set_default_options(struct cli_options *opts) {
@@ -210,7 +209,6 @@ static void set_default_options(struct cli_options *opts) {
   opts->laser_z_ch = 4;
   opts->laser_flip_x = 0;
   opts->laser_flip_y = 0;
-  opts->list_audio_devices = 0;
 }
 
 static const char *find_config_path(int argc, char **argv) {
@@ -332,7 +330,6 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-z NUM          Laser Z/blank channel index (default: 4)\n"
       "  --laser-flip-x         Invert the laser X axis\n"
       "  --laser-flip-y         Invert the laser Y axis\n"
-      "  --list-audio-devices   List available audio output devices and exit\n"
       "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -397,8 +394,6 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
     } else if (strcmp(name, "config") == 0) {
       require_arg(name, &i, argc, argv,
                   val); /* already processed; skip value */
-    } else if (strcmp(name, "list-audio-devices") == 0) {
-      opts->list_audio_devices = 1;
     } else if (strcmp(name, "help") == 0) {
       usage(argv[0], 0);
     } else {
@@ -462,11 +457,8 @@ int main(int argc, char *argv[]) {
     exit(-1);
   }
 
-  if (opts.list_audio_devices) {
-    list_audio_devices();
-    SDL_Quit();
-    return 0;
-  }
+  list_audio_devices();
+
   SDL_CreateWindowAndRenderer(330 * 3 / 2, 410 * 3 / 2, SDL_WINDOW_RESIZABLE,
                               &screen, &renderer);
   if (screen == NULL || renderer == NULL) {

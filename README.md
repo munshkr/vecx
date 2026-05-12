@@ -30,7 +30,6 @@ Options:
   --laser-z NUM          Laser Z/blank channel index (default: 4)
   --laser-flip-x         Invert the laser X axis
   --laser-flip-y         Invert the laser Y axis
-  --list-audio-devices   List available audio output devices and exit
   --config FILE          Load configuration from FILE
   --help                 Show this help and exit
 ```
@@ -40,7 +39,6 @@ Examples:
 ./vecx --rom rom.dat
 ./vecx --rom rom.dat --cart mygame.bin
 ./vecx --rom rom.dat --cart mygame.bin --overlay overlay.bmp
-./vecx --list-audio-devices
 ./vecx --rom rom.dat --cart mygame.bin --device "MacBook Pro Speakers"
 ./vecx --rom rom.dat --cart mygame.bin --device "BlackHole 64ch" --laser-flip-y
 ./vecx --config mysetup.cfg
@@ -86,11 +84,7 @@ Game audio (AY-3-8910 PSG) is always output through the selected device.
 By default it is sent to channels 0 (left) and 1 (right). Override with
 `--audio-l` and `--audio-r`.
 
-To list available devices:
-
-```
-./vecx --list-audio-devices
-```
+Available audio devices are listed at startup.
 
 Laser Output
 ------------

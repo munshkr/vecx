@@ -96,14 +96,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           tar -czf "vecx-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz" \
-            vecx rom.dat README.md LICENSE.md
+            vecx rom.dat vecx.cfg README.md LICENSE.md
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $dlls = (Get-ChildItem *.dll).Name
-          $files = @('vecx.exe', 'rom.dat', 'README.md', 'LICENSE.md') + $dlls
+          $files = @('vecx.exe', 'rom.dat', 'vecx.cfg', 'README.md', 'LICENSE.md') + $dlls
           Compress-Archive -Path $files `
             -DestinationPath "vecx-${{ steps.version.outputs.value }}-windows.zip"
 
