@@ -1,6 +1,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "SDL.h"
 #include "SDL2_gfxPrimitives.h"
@@ -436,6 +439,12 @@ void load_overlay(const char *filename) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+  if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+    freopen("CONOUT$", "w", stdout);
+    freopen("CONOUT$", "w", stderr);
+  }
+#endif
   struct cli_options opts;
   set_default_options(&opts);
 
