@@ -1,6 +1,6 @@
 
-#include <getopt.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "SDL.h"
 #include "SDL2_gfxPrimitives.h"
@@ -221,23 +221,18 @@ static void usage(const char *prog, int exitcode) {
   exit(exitcode);
 }
 
-static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
-  static const struct option long_opts[] = {
-      {"rom", required_argument, NULL, 'r'},
-      {"cart", required_argument, NULL, 'c'},
-      {"overlay", required_argument, NULL, 'o'},
-      {"device", required_argument, NULL, 'D'},
-      {"audio-l", required_argument, NULL, 'l'},
-      {"audio-r", required_argument, NULL, 'R'},
-      {"laser-x", required_argument, NULL, 'x'},
-      {"laser-y", required_argument, NULL, 'y'},
-      {"laser-z", required_argument, NULL, 'z'},
-      {"laser-flip-x", no_argument, NULL, 'X'},
-      {"laser-flip-y", no_argument, NULL, 'Y'},
-      {"list-audio-devices", no_argument, NULL, 'L'},
-      {"help", no_argument, NULL, 'h'},
-      {NULL, 0, NULL, 0}};
+static const char *require_arg(const char *name, int *i, int argc, char **argv,
+                               const char *inline_val) {
+  if (inline_val)
+    return inline_val;
+  if (*i + 1 >= argc) {
+    fprintf(stderr, "%s: option '--%s' requires an argument\n", argv[0], name);
+    usage(argv[0], 1);
+  }
+  return argv[++(*i)];
+}
 
+static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
   opts->rom = "rom.dat";
   opts->cart = NULL;
   opts->overlay = NULL;
@@ -251,56 +246,57 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
   opts->laser_flip_y = 0;
   opts->list_audio_devices = 0;
 
-  int c;
-  while ((c = getopt_long(argc, argv, "", long_opts, NULL)) != -1) {
-    switch (c) {
-    case 'r':
-      opts->rom = optarg;
-      break;
-    case 'c':
-      opts->cart = optarg;
-      break;
-    case 'o':
-      opts->overlay = optarg;
-      break;
-    case 'D':
-      opts->device = optarg;
-      break;
-    case 'l':
-      opts->audio_l_ch = atoi(optarg);
-      break;
-    case 'R':
-      opts->audio_r_ch = atoi(optarg);
-      break;
-    case 'x':
-      opts->laser_x_ch = atoi(optarg);
-      break;
-    case 'y':
-      opts->laser_y_ch = atoi(optarg);
-      break;
-    case 'z':
-      opts->laser_z_ch = atoi(optarg);
-      break;
-    case 'X':
-      opts->laser_flip_x = 1;
-      break;
-    case 'Y':
-      opts->laser_flip_y = 1;
-      break;
-    case 'L':
-      opts->list_audio_devices = 1;
-      break;
-    case 'h':
-      usage(argv[0], 0);
-      break;
-    default:
+  for (int i = 1; i < argc; i++) {
+    const char *arg = argv[i];
+    if (strncmp(arg, "--", 2) != 0) {
+      fprintf(stderr, "%s: unexpected argument '%s'\n", argv[0], arg);
       usage(argv[0], 1);
-      break;
     }
-  }
-  if (optind < argc) {
-    fprintf(stderr, "%s: unexpected argument '%s'\n", argv[0], argv[optind]);
-    usage(argv[0], 1);
+    const char *name = arg + 2;
+    const char *val = NULL;
+    char name_buf[64];
+    const char *eq = strchr(name, '=');
+    if (eq) {
+      size_t len = (size_t)(eq - name);
+      if (len >= sizeof(name_buf)) {
+        fprintf(stderr, "%s: unknown option: %s\n", argv[0], arg);
+        usage(argv[0], 1);
+      }
+      memcpy(name_buf, name, len);
+      name_buf[len] = '\0';
+      name = name_buf;
+      val = eq + 1;
+    }
+    if (strcmp(name, "rom") == 0) {
+      opts->rom = require_arg(name, &i, argc, argv, val);
+    } else if (strcmp(name, "cart") == 0) {
+      opts->cart = require_arg(name, &i, argc, argv, val);
+    } else if (strcmp(name, "overlay") == 0) {
+      opts->overlay = require_arg(name, &i, argc, argv, val);
+    } else if (strcmp(name, "device") == 0) {
+      opts->device = require_arg(name, &i, argc, argv, val);
+    } else if (strcmp(name, "audio-l") == 0) {
+      opts->audio_l_ch = atoi(require_arg(name, &i, argc, argv, val));
+    } else if (strcmp(name, "audio-r") == 0) {
+      opts->audio_r_ch = atoi(require_arg(name, &i, argc, argv, val));
+    } else if (strcmp(name, "laser-x") == 0) {
+      opts->laser_x_ch = atoi(require_arg(name, &i, argc, argv, val));
+    } else if (strcmp(name, "laser-y") == 0) {
+      opts->laser_y_ch = atoi(require_arg(name, &i, argc, argv, val));
+    } else if (strcmp(name, "laser-z") == 0) {
+      opts->laser_z_ch = atoi(require_arg(name, &i, argc, argv, val));
+    } else if (strcmp(name, "laser-flip-x") == 0) {
+      opts->laser_flip_x = 1;
+    } else if (strcmp(name, "laser-flip-y") == 0) {
+      opts->laser_flip_y = 1;
+    } else if (strcmp(name, "list-audio-devices") == 0) {
+      opts->list_audio_devices = 1;
+    } else if (strcmp(name, "help") == 0) {
+      usage(argv[0], 0);
+    } else {
+      fprintf(stderr, "%s: unknown option: %s\n", argv[0], arg);
+      usage(argv[0], 1);
+    }
   }
 }
 
