@@ -30,6 +30,8 @@ Options:
   --laser-z NUM          Laser Z/blank channel index (default: 4)
   --laser-flip-x         Invert the laser X axis
   --laser-flip-y         Invert the laser Y axis
+  --laser-optimized      Optimized scan: planner eliminates blank travel
+  --laser-buf-samples N  SDL audio buffer size in frames (default: 256)
   --config FILE          Load configuration from FILE
   --help                 Show this help and exit
 ```
@@ -75,6 +77,8 @@ laser-x=2
 laser-y=3
 laser-z=4
 laser-flip-y=true
+laser-optimized=true
+laser-buf-samples=256
 ```
 
 Audio Output
@@ -124,6 +128,33 @@ If the projected image is mirrored, use `--laser-flip-x` and/or `--laser-flip-y`
 ```
 ./vecx --device "BlackHole 64ch" --laser-flip-y
 ./vecx --device "BlackHole 64ch" --laser-flip-x --laser-flip-y
+```
+
+### Optimized scan mode
+
+By default vecx outputs every beam tick, including blank repositioning moves
+between visible segments. In `--laser-optimized` mode a per-frame segment
+planner is used instead: blank travel is eliminated and the beam jumps
+directly to the start of each visible segment. All three channels (X, Y, Z)
+are still output — visible segment samples carry Z = +1.0 (beam on) and the
+inter-frame hold carries Z = −1.0 (beam off).
+
+This reduces the number of wasted DAC samples spent on travel and can improve
+scan quality when using an audio-to-ILDA interface:
+
+```
+./vecx --device "BlackHole 64ch" --laser-optimized
+```
+
+### Output latency
+
+The SDL audio buffer size controls the trade-off between latency and
+underrun risk. The default of 256 frames (≈5.8 ms at 44.1 kHz, ~12 ms
+worst-case) is a good starting point. Reduce to 128 for lower latency on
+hardware that supports it, or increase to 512 if you experience glitches:
+
+```
+./vecx --device "BlackHole 64ch" --laser-buf-samples 128
 ```
 
 > **Note**: if the emulator stalls and the audio buffer empties, the laser

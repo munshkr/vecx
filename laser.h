@@ -5,9 +5,11 @@
 
 /* Laser output mode. */
 typedef enum {
-  LASER_MODE_XYZ = 0, /* X + Y + Z/blank on three channels (default) */
-  LASER_MODE_XY = 1   /* X + Y only; blank travel eliminated via a per-frame
-                       * segment planner.  No Z channel required. */
+  LASER_MODE_XYZ = 0,      /* Standard: per-tick output including blank travel.
+                            * Three channels: X, Y, Z/blank. */
+  LASER_MODE_OPTIMIZED = 1 /* Optimized: per-frame segment planner eliminates
+                            * blank travel from the output stream.  All three
+                            * channels (X, Y, Z/blank) are still output. */
 } laser_mode_t;
 
 /* Initialise the unified audio output device.
@@ -15,9 +17,9 @@ typedef enum {
  *   audio_l_ch    — output channel index for PSG left  (default 0).
  *   audio_r_ch    — output channel index for PSG right (default 1).
  *   x_ch, y_ch, z_ch — output channel indices for laser X, Y, Z/blank
- *                       (defaults 2, 3, 4).  z_ch is unused in LASER_MODE_XY.
+ *                       (defaults 2, 3, 4).
  *   flip_x, flip_y — non-zero to invert the respective laser axis.
- *   mode          — LASER_MODE_XYZ (default) or LASER_MODE_XY.
+ *   mode          — LASER_MODE_XYZ (default) or LASER_MODE_OPTIMIZED.
  * The device's native sample rate is used automatically. */
 /* buf_samples: SDL audio buffer size in frames (power of 2, e.g. 256 or 512).
  * Smaller values reduce output latency at the cost of higher underrun risk. */
@@ -27,9 +29,10 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().
- * In LASER_MODE_XYZ: downsamples to the DAC rate and enqueues into the ring.
- * In LASER_MODE_XY:  no-op; ring is fed by laser_submit_frame() instead.
- * x in [0, ALG_MAX_X], y in [0, ALG_MAX_Y], blank: 1=beam on, 0=beam off. */
+ * In LASER_MODE_XYZ:       downsamples to the DAC rate and enqueues into the
+ * ring. In LASER_MODE_OPTIMIZED: no-op; ring is fed by laser_submit_frame()
+ * instead. x in [0, ALG_MAX_X], y in [0, ALG_MAX_Y], blank: 1=beam on, 0=beam
+ * off. */
 void laser_push(long x, long y, unsigned blank);
 
 /* Called once per emulator frame from vecx_emu() (no-op in LASER_MODE_XYZ).

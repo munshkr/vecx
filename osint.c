@@ -310,15 +310,16 @@ static void load_config_file(const char *path, struct cli_options *opts,
         fclose(f);
         exit(EXIT_FAILURE);
       }
-    } else if (strcmp(key, "laser-xy") == 0) {
+    } else if (strcmp(key, "laser-optimized") == 0) {
       if (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 ||
           strcmp(val, "yes") == 0)
-        opts->laser_mode = LASER_MODE_XY;
+        opts->laser_mode = LASER_MODE_OPTIMIZED;
       else if (strcmp(val, "false") == 0 || strcmp(val, "0") == 0 ||
                strcmp(val, "no") == 0)
         opts->laser_mode = LASER_MODE_XYZ;
       else {
-        fprintf(stderr, "%s: %s:%d: invalid value for 'laser-xy': '%s'\n", prog,
+        fprintf(stderr,
+                "%s: %s:%d: invalid value for 'laser-optimized': '%s'\n", prog,
                 path, lineno, val);
         fclose(f);
         exit(EXIT_FAILURE);
@@ -359,7 +360,8 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-z NUM          Laser Z/blank channel index (default: 4)\n"
       "  --laser-flip-x         Invert the laser X axis\n"
       "  --laser-flip-y         Invert the laser Y axis\n"
-      "  --laser-xy             XY-only: 2 ch, blank travel not output\n"
+      "  --laser-optimized      Optimized scan: planner eliminates blank "
+      "travel\n"
       "  --laser-buf-samples N  SDL audio buffer size in frames (default: "
       "256)\n"
       "  --config FILE          Load configuration from FILE\n"
@@ -423,8 +425,8 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       opts->laser_flip_x = 1;
     } else if (strcmp(name, "laser-flip-y") == 0) {
       opts->laser_flip_y = 1;
-    } else if (strcmp(name, "laser-xy") == 0) {
-      opts->laser_mode = LASER_MODE_XY;
+    } else if (strcmp(name, "laser-optimized") == 0) {
+      opts->laser_mode = LASER_MODE_OPTIMIZED;
     } else if (strcmp(name, "laser-buf-samples") == 0) {
       opts->laser_buf_samples = atoi(require_arg(name, &i, argc, argv, val));
       if (opts->laser_buf_samples <= 0) {
