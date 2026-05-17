@@ -38,6 +38,11 @@ static int laser_audio_r_ch = 1;
 /* Set once laser_init knows the real channel count; gates laser_push. */
 static int laser_xyz_enabled = 0;
 
+static laser_mode_t laser_mode = LASER_MODE_XYZ;
+/* In LASER_MODE_XY, hold the last beam-on position during blank travel. */
+static float laser_xy_hold_x = 0.0f;
+static float laser_xy_hold_y = 0.0f;
+
 /* DDA accumulator for integer-ratio downsampling from VECTREX_MHZ to the
  * actual device frequency.  laser_dda_rate is the device sample rate. */
 static unsigned laser_dda_accum = 0;
@@ -97,7 +102,7 @@ static void unified_callback(void *userdata, Uint8 *stream, int len) {
       out[i * ch + laser_channel_map[0]] = x;
     if (laser_channel_map[1] < ch)
       out[i * ch + laser_channel_map[1]] = y;
-    if (laser_channel_map[2] < ch)
+    if (laser_mode == LASER_MODE_XYZ && laser_channel_map[2] < ch)
       out[i * ch + laser_channel_map[2]] = z;
   }
 }
@@ -106,7 +111,8 @@ static void unified_callback(void *userdata, Uint8 *stream, int len) {
  * Public API
  * ------------------------------------------------------------------------- */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
-                int x_ch, int y_ch, int z_ch, int flip_x, int flip_y) {
+                int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
+                laser_mode_t mode) {
   SDL_AudioSpec req, given;
   int max_ch;
   SDL_zero(req);
@@ -118,6 +124,7 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
   laser_channel_map[2] = z_ch;
   laser_flip_x = flip_x;
   laser_flip_y = flip_y;
+  laser_mode = mode;
 
   /* Determine how many channels the device must provide. */
   max_ch = audio_l_ch;
@@ -127,7 +134,7 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
     max_ch = laser_channel_map[0];
   if (laser_channel_map[1] > max_ch)
     max_ch = laser_channel_map[1];
-  if (laser_channel_map[2] > max_ch)
+  if (laser_mode == LASER_MODE_XYZ && laser_channel_map[2] > max_ch)
     max_ch = laser_channel_map[2];
 
   /* Query the device's native sample rate so we request it directly.
@@ -170,12 +177,21 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
   laser_channels = given.channels;
   laser_dda_rate = (unsigned)given.freq;
 
-  fprintf(stdout,
-          "output: opened '%s' — %d Hz, %d ch, fmt 0x%04x\n"
-          "        audio L=%d R=%d  laser X=%d Y=%d Z=%d\n",
-          device_name ? device_name : "(default)", given.freq, given.channels,
-          given.format, laser_audio_l_ch, laser_audio_r_ch,
-          laser_channel_map[0], laser_channel_map[1], laser_channel_map[2]);
+  if (laser_mode == LASER_MODE_XY) {
+    fprintf(stdout,
+            "output: opened '%s' — %d Hz, %d ch, fmt 0x%04x\n"
+            "        audio L=%d R=%d  laser X=%d Y=%d (XY-only mode)\n",
+            device_name ? device_name : "(default)", given.freq, given.channels,
+            given.format, laser_audio_l_ch, laser_audio_r_ch,
+            laser_channel_map[0], laser_channel_map[1]);
+  } else {
+    fprintf(stdout,
+            "output: opened '%s' — %d Hz, %d ch, fmt 0x%04x\n"
+            "        audio L=%d R=%d  laser X=%d Y=%d Z=%d\n",
+            device_name ? device_name : "(default)", given.freq, given.channels,
+            given.format, laser_audio_l_ch, laser_audio_r_ch,
+            laser_channel_map[0], laser_channel_map[1], laser_channel_map[2]);
+  }
 
   if (given.channels < max_ch + 1) {
     fprintf(stderr,
@@ -184,14 +200,22 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
             given.channels, max_ch + 1);
   }
 
-  /* Laser XYZ is active only when all three channels fit in the device. */
-  laser_xyz_enabled = (laser_channel_map[0] < laser_channels) &&
-                      (laser_channel_map[1] < laser_channels) &&
-                      (laser_channel_map[2] < laser_channels);
+  /* Laser output is active when all required channels fit in the device.
+   * In LASER_MODE_XY the Z channel is not required. */
+  if (laser_mode == LASER_MODE_XY) {
+    laser_xyz_enabled = (laser_channel_map[0] < laser_channels) &&
+                        (laser_channel_map[1] < laser_channels);
+  } else {
+    laser_xyz_enabled = (laser_channel_map[0] < laser_channels) &&
+                        (laser_channel_map[1] < laser_channels) &&
+                        (laser_channel_map[2] < laser_channels);
+  }
 
   SDL_AtomicSet(&laser_head, 0);
   SDL_AtomicSet(&laser_tail, 0);
   laser_dda_accum = 0;
+  laser_xy_hold_x = 0.0f;
+  laser_xy_hold_y = 0.0f;
 
   SDL_PauseAudioDevice(laser_device_id, 0);
 }
@@ -234,9 +258,22 @@ void laser_push(long x, long y, unsigned blank) {
   if (laser_flip_y)
     fy = -fy;
 
-  /* Z: +1.0 = beam on, -1.0 = beam off.
-   * Invert the sign here if your DAC-ILDA uses opposite polarity. */
-  fz = blank ? 1.0f : -1.0f;
+  if (laser_mode == LASER_MODE_XY) {
+    /* XY-only: hold the last beam-on position during blank travel so
+     * repositioning moves are hidden and the ring buffer stays full. */
+    if (blank) {
+      laser_xy_hold_x = fx;
+      laser_xy_hold_y = fy;
+    } else {
+      fx = laser_xy_hold_x;
+      fy = laser_xy_hold_y;
+    }
+    fz = 0.0f;
+  } else {
+    /* Z: +1.0 = beam on, -1.0 = beam off.
+     * Invert the sign here if your DAC-ILDA uses opposite polarity. */
+    fz = blank ? 1.0f : -1.0f;
+  }
 
   head = SDL_AtomicGet(&laser_head);
   tail = SDL_AtomicGet(&laser_tail);

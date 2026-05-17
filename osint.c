@@ -198,6 +198,7 @@ struct cli_options {
   int laser_z_ch;
   int laser_flip_x;
   int laser_flip_y;
+  laser_mode_t laser_mode;
 };
 
 static void set_default_options(struct cli_options *opts) {
@@ -212,6 +213,7 @@ static void set_default_options(struct cli_options *opts) {
   opts->laser_z_ch = 4;
   opts->laser_flip_x = 0;
   opts->laser_flip_y = 0;
+  opts->laser_mode = LASER_MODE_XYZ;
 }
 
 static const char *find_config_path(int argc, char **argv) {
@@ -306,6 +308,19 @@ static void load_config_file(const char *path, struct cli_options *opts,
         fclose(f);
         exit(EXIT_FAILURE);
       }
+    } else if (strcmp(key, "laser-xy") == 0) {
+      if (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 ||
+          strcmp(val, "yes") == 0)
+        opts->laser_mode = LASER_MODE_XY;
+      else if (strcmp(val, "false") == 0 || strcmp(val, "0") == 0 ||
+               strcmp(val, "no") == 0)
+        opts->laser_mode = LASER_MODE_XYZ;
+      else {
+        fprintf(stderr, "%s: %s:%d: invalid value for 'laser-xy': '%s'\n", prog,
+                path, lineno, val);
+        fclose(f);
+        exit(EXIT_FAILURE);
+      }
     } else {
       fprintf(stderr, "%s: %s:%d: unknown option '%s'\n", prog, path, lineno,
               key);
@@ -333,6 +348,7 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-z NUM          Laser Z/blank channel index (default: 4)\n"
       "  --laser-flip-x         Invert the laser X axis\n"
       "  --laser-flip-y         Invert the laser Y axis\n"
+      "  --laser-xy             XY-only: 2-ch output, blank travel hidden\n"
       "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -394,6 +410,8 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       opts->laser_flip_x = 1;
     } else if (strcmp(name, "laser-flip-y") == 0) {
       opts->laser_flip_y = 1;
+    } else if (strcmp(name, "laser-xy") == 0) {
+      opts->laser_mode = LASER_MODE_XY;
     } else if (strcmp(name, "config") == 0) {
       require_arg(name, &i, argc, argv,
                   val); /* already processed; skip value */
@@ -486,7 +504,7 @@ int main(int argc, char *argv[]) {
   e8910_init();
   laser_init(opts.device, opts.audio_l_ch, opts.audio_r_ch, opts.laser_x_ch,
              opts.laser_y_ch, opts.laser_z_ch, opts.laser_flip_x,
-             opts.laser_flip_y);
+             opts.laser_flip_y, opts.laser_mode);
   osint_emuloop();
   laser_done();
   SDL_Quit();
