@@ -1,11 +1,13 @@
 #ifndef __LASER_H
 #define __LASER_H
 
+#include "vecx.h" /* for vector_t */
+
 /* Laser output mode. */
 typedef enum {
   LASER_MODE_XYZ = 0, /* X + Y + Z/blank on three channels (default) */
-  LASER_MODE_XY = 1   /* X + Y only; blank travel is replaced by holding the
-                       * last visible beam position.  No Z channel required. */
+  LASER_MODE_XY = 1   /* X + Y only; blank travel eliminated via a per-frame
+                       * segment planner.  No Z channel required. */
 } laser_mode_t;
 
 /* Initialise the unified audio output device.
@@ -23,8 +25,16 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().
- * Downsamples to the DAC sample rate and enqueues into the ring buffer.
+ * In LASER_MODE_XYZ: downsamples to the DAC rate and enqueues into the ring.
+ * In LASER_MODE_XY:  no-op; ring is fed by laser_submit_frame() instead.
  * x in [0, ALG_MAX_X], y in [0, ALG_MAX_Y], blank: 1=beam on, 0=beam off. */
 void laser_push(long x, long y, unsigned blank);
+
+/* Called once per emulator frame from vecx_emu() (no-op in LASER_MODE_XYZ).
+ * Distributes the visible segment list across one frame's worth of DAC
+ * samples.  Blank travel between segments is omitted; the beam jumps directly
+ * to each segment start.  segs/count are vectors_draw/vector_draw_cnt taken
+ * before the frame's vector lists are swapped. */
+void laser_submit_frame(const vector_t *segs, int count);
 
 #endif

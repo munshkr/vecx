@@ -3,6 +3,7 @@
 
 enum {
   VECTREX_MHZ = 1500000, /* speed of the vectrex being emulated */
+  VECTREX_PDECAY = 30,   /* phosphor decay rate (frames per second) */
   VECTREX_COLORS = 128,  /* number of possible colors ... grayscale */
 
   ALG_MAX_X = 33000,

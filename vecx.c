@@ -64,8 +64,6 @@ static long alg_curr_x; /* current x position */
 static long alg_curr_y; /* current y position */
 
 enum {
-  VECTREX_PDECAY = 30, /* phosphor decay rate */
-
   /* number of 6809 cycles before a frame redraw */
 
   FCYCLES_INIT = VECTREX_MHZ / VECTREX_PDECAY,
@@ -926,6 +924,7 @@ void vecx_emu(long cycles) {
 
       fcycles += FCYCLES_INIT;
       osint_render();
+      laser_submit_frame(vectors_draw, (int)vector_draw_cnt);
 
       /* everything that was drawn during this pass now now enters
        * the erase list for the next pass.

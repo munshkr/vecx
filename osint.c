@@ -348,7 +348,7 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-z NUM          Laser Z/blank channel index (default: 4)\n"
       "  --laser-flip-x         Invert the laser X axis\n"
       "  --laser-flip-y         Invert the laser Y axis\n"
-      "  --laser-xy             XY-only: 2-ch output, blank travel hidden\n"
+      "  --laser-xy             XY-only: 2 ch, blank travel not output\n"
       "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);

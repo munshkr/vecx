@@ -39,7 +39,7 @@ static int laser_audio_r_ch = 1;
 static int laser_xyz_enabled = 0;
 
 static laser_mode_t laser_mode = LASER_MODE_XYZ;
-/* In LASER_MODE_XY, hold the last beam-on position during blank travel. */
+/* In LASER_MODE_XY, tracks the last emitted beam position between frames. */
 static float laser_xy_hold_x = 0.0f;
 static float laser_xy_hold_y = 0.0f;
 
@@ -47,6 +47,45 @@ static float laser_xy_hold_y = 0.0f;
  * actual device frequency.  laser_dda_rate is the device sample rate. */
 static unsigned laser_dda_accum = 0;
 static unsigned laser_dda_rate = LASER_REQUESTED_FREQ;
+
+/* -------------------------------------------------------------------------
+ * Internal helpers
+ * ------------------------------------------------------------------------- */
+
+/* Converts Vectrex beam coordinates to normalised [-1.0, +1.0] floats,
+ * clamps to range, and applies the flip settings. */
+static void normalize_xy(long x, long y, float *fx_out, float *fy_out) {
+  float fx = (float)x * (2.0f / ALG_MAX_X) - 1.0f;
+  float fy = (float)y * (2.0f / ALG_MAX_Y) - 1.0f;
+  if (fx < -1.0f)
+    fx = -1.0f;
+  if (fx > 1.0f)
+    fx = 1.0f;
+  if (fy < -1.0f)
+    fy = -1.0f;
+  if (fy > 1.0f)
+    fy = 1.0f;
+  if (laser_flip_x)
+    fx = -fx;
+  if (laser_flip_y)
+    fy = -fy;
+  *fx_out = fx;
+  *fy_out = fy;
+}
+
+/* Push one sample to the SPSC ring buffer.  Drops silently when full —
+ * both laser_push() and laser_submit_frame() are producers. */
+static void ring_push(float x, float y, float z) {
+  int head = SDL_AtomicGet(&laser_head);
+  int tail = SDL_AtomicGet(&laser_tail);
+  int next_head = (head + 1) & LASER_RING_MASK;
+  if (next_head == tail)
+    return;
+  laser_ring[head].x = x;
+  laser_ring[head].y = y;
+  laser_ring[head].z = z;
+  SDL_AtomicSet(&laser_head, next_head);
+}
 
 /* -------------------------------------------------------------------------
  * Unified audio callback — PSG audio + laser XYZ in one device.
@@ -86,11 +125,19 @@ static void unified_callback(void *userdata, Uint8 *stream, int len) {
     float x, y, z;
 
     if (tail == head) {
-      /* Underrun: park at centre with beam off — safe for high-power
-       * lasers (a stuck lit beam can damage surfaces). */
-      x = 0.0f;
-      y = 0.0f;
-      z = -1.0f;
+      if (laser_mode == LASER_MODE_XY) {
+        /* XY underrun: hold last known position to avoid an unchecked
+         * jump to centre with no blanking signal to guard it. */
+        x = laser_xy_hold_x;
+        y = laser_xy_hold_y;
+        z = 0.0f;
+      } else {
+        /* XYZ underrun: park at centre with beam off — safe for high-power
+         * lasers (a stuck lit beam can damage surfaces). */
+        x = 0.0f;
+        y = 0.0f;
+        z = -1.0f;
+      }
     } else {
       x = laser_ring[tail].x;
       y = laser_ring[tail].y;
@@ -228,10 +275,10 @@ void laser_done(void) {
 }
 
 void laser_push(long x, long y, unsigned blank) {
-  int head, next_head, tail;
-  float fx, fy, fz;
+  float fx, fy;
 
-  if (!laser_xyz_enabled)
+  /* In LASER_MODE_XY the ring is fed by laser_submit_frame(); skip. */
+  if (!laser_xyz_enabled || laser_mode == LASER_MODE_XY)
     return;
 
   /* DDA downsampling: accumulate device_rate per Vectrex tick; emit one
@@ -241,49 +288,82 @@ void laser_push(long x, long y, unsigned blank) {
     return;
   laser_dda_accum -= VECTREX_MHZ;
 
-  /* Normalise to [-1.0, +1.0] and clamp (beam can stray out of bounds
-   * during repositioning moves). */
-  fx = (float)x * (2.0f / ALG_MAX_X) - 1.0f;
-  fy = (float)y * (2.0f / ALG_MAX_Y) - 1.0f;
-  if (fx < -1.0f)
-    fx = -1.0f;
-  if (fx > 1.0f)
-    fx = 1.0f;
-  if (fy < -1.0f)
-    fy = -1.0f;
-  if (fy > 1.0f)
-    fy = 1.0f;
-  if (laser_flip_x)
-    fx = -fx;
-  if (laser_flip_y)
-    fy = -fy;
+  normalize_xy(x, y, &fx, &fy);
+  /* Z: +1.0 = beam on, -1.0 = beam off.
+   * Invert the sign here if your DAC-ILDA uses opposite polarity. */
+  ring_push(fx, fy, blank ? 1.0f : -1.0f);
+}
 
-  if (laser_mode == LASER_MODE_XY) {
-    /* XY-only: hold the last beam-on position during blank travel so
-     * repositioning moves are hidden and the ring buffer stays full. */
-    if (blank) {
-      laser_xy_hold_x = fx;
-      laser_xy_hold_y = fy;
-    } else {
-      fx = laser_xy_hold_x;
-      fy = laser_xy_hold_y;
-    }
-    fz = 0.0f;
-  } else {
-    /* Z: +1.0 = beam on, -1.0 = beam off.
-     * Invert the sign here if your DAC-ILDA uses opposite polarity. */
-    fz = blank ? 1.0f : -1.0f;
+/* Called once per emulator frame in LASER_MODE_XY from vecx_emu().
+ * Distributes the visible segment list across one frame's worth of DAC
+ * samples.  Blank travel is omitted; the beam jumps to each segment start. */
+void laser_submit_frame(const vector_t *segs, int count) {
+  int s, j, valid, frame_samples, n_per_seg, emitted;
+  float last_x, last_y;
+
+  if (!laser_xyz_enabled || laser_mode != LASER_MODE_XY)
+    return;
+
+  /* Number of DAC samples this frame should occupy. */
+  frame_samples = (int)(laser_dda_rate / VECTREX_PDECAY);
+  if (frame_samples <= 0)
+    return;
+
+  /* Count non-erased segments. */
+  valid = 0;
+  for (s = 0; s < count; s++)
+    if (segs[s].color != VECTREX_COLORS)
+      valid++;
+
+  last_x = laser_xy_hold_x;
+  last_y = laser_xy_hold_y;
+
+  if (valid == 0) {
+    /* Empty frame: hold last beam position to keep ring on pace. */
+    for (j = 0; j < frame_samples; j++)
+      ring_push(last_x, last_y, 0.0f);
+    return;
   }
 
-  head = SDL_AtomicGet(&laser_head);
-  tail = SDL_AtomicGet(&laser_tail);
-  next_head = (head + 1) & LASER_RING_MASK;
+  n_per_seg = frame_samples / valid;
+  if (n_per_seg < 1)
+    n_per_seg = 1;
 
-  if (next_head == tail)
-    return; /* ring full: drop sample rather than blocking */
+  emitted = 0;
 
-  laser_ring[head].x = fx;
-  laser_ring[head].y = fy;
-  laser_ring[head].z = fz;
-  SDL_AtomicSet(&laser_head, next_head);
+  for (s = 0; s < count; s++) {
+    float x0, y0, x1, y1, dx, dy;
+    int n;
+
+    if (segs[s].color == VECTREX_COLORS)
+      continue;
+
+    normalize_xy(segs[s].x0, segs[s].y0, &x0, &y0);
+    normalize_xy(segs[s].x1, segs[s].y1, &x1, &y1);
+    dx = x1 - x0;
+    dy = y1 - y0;
+
+    n = n_per_seg;
+    if (emitted + n > frame_samples)
+      n = frame_samples - emitted;
+    if (n <= 0)
+      break;
+
+    /* Interpolate n samples from (x0,y0) to (x1,y1).
+     * The jump from the previous segment end to (x0,y0) is instantaneous. */
+    for (j = 0; j < n; j++) {
+      float t = (n > 1) ? (float)j / (float)(n - 1) : 0.0f;
+      ring_push(x0 + t * dx, y0 + t * dy, 0.0f);
+    }
+    emitted += n;
+    last_x = x1;
+    last_y = y1;
+  }
+
+  /* Hold last position for any remaining budget (rounding residual). */
+  for (; emitted < frame_samples; emitted++)
+    ring_push(last_x, last_y, 0.0f);
+
+  laser_xy_hold_x = last_x;
+  laser_xy_hold_y = last_y;
 }
