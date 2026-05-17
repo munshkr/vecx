@@ -199,6 +199,7 @@ struct cli_options {
   int laser_flip_x;
   int laser_flip_y;
   laser_mode_t laser_mode;
+  int laser_buf_samples;
 };
 
 static void set_default_options(struct cli_options *opts) {
@@ -214,6 +215,7 @@ static void set_default_options(struct cli_options *opts) {
   opts->laser_flip_x = 0;
   opts->laser_flip_y = 0;
   opts->laser_mode = LASER_MODE_XYZ;
+  opts->laser_buf_samples = 256;
 }
 
 static const char *find_config_path(int argc, char **argv) {
@@ -321,6 +323,15 @@ static void load_config_file(const char *path, struct cli_options *opts,
         fclose(f);
         exit(EXIT_FAILURE);
       }
+    } else if (strcmp(key, "laser-buf-samples") == 0) {
+      opts->laser_buf_samples = atoi(val);
+      if (opts->laser_buf_samples <= 0) {
+        fprintf(stderr,
+                "%s: %s:%d: invalid value for 'laser-buf-samples': '%s'\n",
+                prog, path, lineno, val);
+        fclose(f);
+        exit(EXIT_FAILURE);
+      }
     } else {
       fprintf(stderr, "%s: %s:%d: unknown option '%s'\n", prog, path, lineno,
               key);
@@ -349,6 +360,8 @@ static void usage(const char *prog, int exitcode) {
       "  --laser-flip-x         Invert the laser X axis\n"
       "  --laser-flip-y         Invert the laser Y axis\n"
       "  --laser-xy             XY-only: 2 ch, blank travel not output\n"
+      "  --laser-buf-samples N  SDL audio buffer size in frames (default: "
+      "256)\n"
       "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -412,6 +425,13 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       opts->laser_flip_y = 1;
     } else if (strcmp(name, "laser-xy") == 0) {
       opts->laser_mode = LASER_MODE_XY;
+    } else if (strcmp(name, "laser-buf-samples") == 0) {
+      opts->laser_buf_samples = atoi(require_arg(name, &i, argc, argv, val));
+      if (opts->laser_buf_samples <= 0) {
+        fprintf(stderr, "%s: invalid value for '--laser-buf-samples'\n",
+                argv[0]);
+        usage(argv[0], 1);
+      }
     } else if (strcmp(name, "config") == 0) {
       require_arg(name, &i, argc, argv,
                   val); /* already processed; skip value */
@@ -504,7 +524,7 @@ int main(int argc, char *argv[]) {
   e8910_init();
   laser_init(opts.device, opts.audio_l_ch, opts.audio_r_ch, opts.laser_x_ch,
              opts.laser_y_ch, opts.laser_z_ch, opts.laser_flip_x,
-             opts.laser_flip_y, opts.laser_mode);
+             opts.laser_flip_y, opts.laser_mode, opts.laser_buf_samples);
   osint_emuloop();
   laser_done();
   SDL_Quit();

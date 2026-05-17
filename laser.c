@@ -5,9 +5,9 @@
 #include <stdio.h>
 
 /* Ring buffer capacity — must be a power of 2.
- * At 44100 Hz the emulator fills ~882 samples per 20 ms burst; 4096 gives
- * roughly 93 ms of headroom, more than enough to absorb timer jitter. */
-#define LASER_RING_SIZE 4096
+ * At 44100 Hz the emulator fills ~882 samples per 20 ms burst; 2048 gives
+ * roughly 46 ms of headroom, more than enough to absorb timer jitter. */
+#define LASER_RING_SIZE 2048
 #define LASER_RING_MASK (LASER_RING_SIZE - 1)
 
 /* Hint passed to SDL; ALLOW_FREQUENCY_CHANGE lets the driver use its native
@@ -159,7 +159,7 @@ static void unified_callback(void *userdata, Uint8 *stream, int len) {
  * ------------------------------------------------------------------------- */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
                 int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
-                laser_mode_t mode) {
+                laser_mode_t mode, int buf_samples) {
   SDL_AudioSpec req, given;
   int max_ch;
   SDL_zero(req);
@@ -205,7 +205,7 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
   req.freq = native_freq;
   req.format = AUDIO_F32SYS;
   req.channels = max_ch + 1;
-  req.samples = 512;
+  req.samples = (Uint16)buf_samples;
   req.callback = unified_callback;
   req.userdata = NULL;
 

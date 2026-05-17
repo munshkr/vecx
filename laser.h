@@ -19,9 +19,11 @@ typedef enum {
  *   flip_x, flip_y — non-zero to invert the respective laser axis.
  *   mode          — LASER_MODE_XYZ (default) or LASER_MODE_XY.
  * The device's native sample rate is used automatically. */
+/* buf_samples: SDL audio buffer size in frames (power of 2, e.g. 256 or 512).
+ * Smaller values reduce output latency at the cost of higher underrun risk. */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
                 int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
-                laser_mode_t mode);
+                laser_mode_t mode, int buf_samples);
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().
