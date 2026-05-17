@@ -39,9 +39,13 @@ static int laser_audio_r_ch = 1;
 static int laser_xyz_enabled = 0;
 
 static laser_mode_t laser_mode = LASER_MODE_XYZ;
-/* In LASER_MODE_XY, tracks the last emitted beam position between frames. */
+/* In LASER_MODE_OPTIMIZED, tracks the last emitted beam position between
+ * frames. */
 static float laser_xy_hold_x = 0.0f;
 static float laser_xy_hold_y = 0.0f;
+/* Minimum segment length (Manhattan distance in Vectrex units) for
+ * LASER_MODE_OPTIMIZED.  Segments shorter than this are skipped. 0 = off. */
+static long laser_min_seg_len = 0;
 
 /* DDA accumulator for integer-ratio downsampling from VECTREX_MHZ to the
  * actual device frequency.  laser_dda_rate is the device sample rate. */
@@ -93,7 +97,7 @@ static void ring_push(float x, float y, float z) {
  * ------------------------------------------------------------------------- */
 
 /* Scratch buffer for PSG synthesis — sized for the largest callback burst.
- * 4096 frames @ 44100 Hz ≈ 93 ms; SDL typically requests 512–1024. */
+ * 4096 frames @ 44100 Hz ≈ 93 ms; SDL typically requests 512-1024. */
 #define PSG_BUF_FRAMES 4096
 
 static void unified_callback(void *userdata, Uint8 *stream, int len) {
@@ -158,7 +162,7 @@ static void unified_callback(void *userdata, Uint8 *stream, int len) {
  * ------------------------------------------------------------------------- */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
                 int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
-                laser_mode_t mode, int buf_samples) {
+                laser_mode_t mode, int buf_samples, long min_seg_len) {
   SDL_AudioSpec req, given;
   int max_ch;
   SDL_zero(req);
@@ -171,6 +175,7 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
   laser_flip_x = flip_x;
   laser_flip_y = flip_y;
   laser_mode = mode;
+  laser_min_seg_len = min_seg_len;
 
   /* Determine how many channels the device must provide. */
   max_ch = audio_l_ch;
@@ -294,11 +299,24 @@ void laser_submit_frame(const vector_t *segs, int count) {
   if (frame_samples <= 0)
     return;
 
-  /* Count non-erased segments. */
+  /* Count non-erased segments, applying the minimum-length filter. */
   valid = 0;
-  for (s = 0; s < count; s++)
-    if (segs[s].color != VECTREX_COLORS)
-      valid++;
+  for (s = 0; s < count; s++) {
+    long sdx, sdy;
+    if (segs[s].color == VECTREX_COLORS)
+      continue;
+    if (laser_min_seg_len > 0) {
+      sdx = segs[s].x1 - segs[s].x0;
+      if (sdx < 0)
+        sdx = -sdx;
+      sdy = segs[s].y1 - segs[s].y0;
+      if (sdy < 0)
+        sdy = -sdy;
+      if (sdx + sdy < laser_min_seg_len)
+        continue;
+    }
+    valid++;
+  }
 
   last_x = laser_xy_hold_x;
   last_y = laser_xy_hold_y;
@@ -322,6 +340,17 @@ void laser_submit_frame(const vector_t *segs, int count) {
 
     if (segs[s].color == VECTREX_COLORS)
       continue;
+
+    if (laser_min_seg_len > 0) {
+      long sdx = segs[s].x1 - segs[s].x0;
+      if (sdx < 0)
+        sdx = -sdx;
+      long sdy = segs[s].y1 - segs[s].y0;
+      if (sdy < 0)
+        sdy = -sdy;
+      if (sdx + sdy < laser_min_seg_len)
+        continue;
+    }
 
     normalize_xy(segs[s].x0, segs[s].y0, &x0, &y0);
     normalize_xy(segs[s].x1, segs[s].y1, &x1, &y1);

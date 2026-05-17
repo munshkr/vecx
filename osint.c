@@ -200,6 +200,7 @@ struct cli_options {
   int laser_flip_y;
   laser_mode_t laser_mode;
   int laser_buf_samples;
+  long laser_min_seg_len;
 };
 
 static void set_default_options(struct cli_options *opts) {
@@ -216,6 +217,7 @@ static void set_default_options(struct cli_options *opts) {
   opts->laser_flip_y = 0;
   opts->laser_mode = LASER_MODE_XYZ;
   opts->laser_buf_samples = 256;
+  opts->laser_min_seg_len = 0;
 }
 
 static const char *find_config_path(int argc, char **argv) {
@@ -333,6 +335,15 @@ static void load_config_file(const char *path, struct cli_options *opts,
         fclose(f);
         exit(EXIT_FAILURE);
       }
+    } else if (strcmp(key, "laser-min-seg-len") == 0) {
+      opts->laser_min_seg_len = atol(val);
+      if (opts->laser_min_seg_len < 0) {
+        fprintf(stderr,
+                "%s: %s:%d: invalid value for 'laser-min-seg-len': '%s'\n",
+                prog, path, lineno, val);
+        fclose(f);
+        exit(EXIT_FAILURE);
+      }
     } else {
       fprintf(stderr, "%s: %s:%d: unknown option '%s'\n", prog, path, lineno,
               key);
@@ -364,6 +375,8 @@ static void usage(const char *prog, int exitcode) {
       "travel\n"
       "  --laser-buf-samples N  SDL audio buffer size in frames (default: "
       "256)\n"
+      "  --laser-min-seg-len N  Skip segments shorter than N Vectrex units\n"
+      "                         (Manhattan |dx|+|dy|; 0=off, default: 0)\n"
       "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -431,6 +444,13 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       opts->laser_buf_samples = atoi(require_arg(name, &i, argc, argv, val));
       if (opts->laser_buf_samples <= 0) {
         fprintf(stderr, "%s: invalid value for '--laser-buf-samples'\n",
+                argv[0]);
+        usage(argv[0], 1);
+      }
+    } else if (strcmp(name, "laser-min-seg-len") == 0) {
+      opts->laser_min_seg_len = atol(require_arg(name, &i, argc, argv, val));
+      if (opts->laser_min_seg_len < 0) {
+        fprintf(stderr, "%s: invalid value for '--laser-min-seg-len'\n",
                 argv[0]);
         usage(argv[0], 1);
       }
@@ -526,7 +546,8 @@ int main(int argc, char *argv[]) {
   e8910_init();
   laser_init(opts.device, opts.audio_l_ch, opts.audio_r_ch, opts.laser_x_ch,
              opts.laser_y_ch, opts.laser_z_ch, opts.laser_flip_x,
-             opts.laser_flip_y, opts.laser_mode, opts.laser_buf_samples);
+             opts.laser_flip_y, opts.laser_mode, opts.laser_buf_samples,
+             opts.laser_min_seg_len);
   osint_emuloop();
   laser_done();
   SDL_Quit();

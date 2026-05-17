@@ -22,10 +22,13 @@ typedef enum {
  *   mode          — LASER_MODE_XYZ (default) or LASER_MODE_OPTIMIZED.
  * The device's native sample rate is used automatically. */
 /* buf_samples: SDL audio buffer size in frames (power of 2, e.g. 256 or 512).
- * Smaller values reduce output latency at the cost of higher underrun risk. */
+ * Smaller values reduce output latency at the cost of higher underrun risk.
+ * min_seg_len: minimum segment length in Vectrex units (Manhattan distance
+ * |dx|+|dy|).  Segments shorter than this are skipped in LASER_MODE_OPTIMIZED.
+ * 0 disables the filter.  ALG_MAX_X=33000, ALG_MAX_Y=41000 for reference. */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
                 int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
-                laser_mode_t mode, int buf_samples);
+                laser_mode_t mode, int buf_samples, long min_seg_len);
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().
