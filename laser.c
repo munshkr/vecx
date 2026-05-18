@@ -243,10 +243,10 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
             given.channels, max_ch + 1);
   }
 
-  /* Laser output is active when all required channels fit in the device. */
-  laser_xyz_enabled = (laser_channel_map[0] < laser_channels) &&
-                      (laser_channel_map[1] < laser_channels) &&
-                      (laser_channel_map[2] < laser_channels);
+  /* Laser output is active whenever the device opened; per-channel bounds
+   * checks in the callback silently skip any channel the device doesn't have.
+   */
+  laser_xyz_enabled = 1;
 
   SDL_AtomicSet(&laser_head, 0);
   SDL_AtomicSet(&laser_tail, 0);
