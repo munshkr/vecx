@@ -46,6 +46,12 @@ static float laser_xy_hold_y = 0.0f;
 /* Minimum segment length (Manhattan distance in Vectrex units) for
  * LASER_MODE_OPTIMIZED.  Segments shorter than this are skipped. 0 = off. */
 static long laser_min_seg_len = 0;
+/* Scan speed multiplier applied to samples-per-segment in
+ * LASER_MODE_OPTIMIZED.  1.0 = default (even distribution across frame
+ * budget).  > 1.0 gives each segment more dwell time — useful for slow
+ * galvanometers.  < 1.0 scans each segment faster, fitting more content at
+ * the cost of tracking accuracy. */
+static float laser_scan_speed = 1.0f;
 
 /* DDA accumulator for integer-ratio downsampling from VECTREX_MHZ to the
  * actual device frequency.  laser_dda_rate is the device sample rate. */
@@ -162,7 +168,8 @@ static void unified_callback(void *userdata, Uint8 *stream, int len) {
  * ------------------------------------------------------------------------- */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
                 int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
-                laser_mode_t mode, int buf_samples, long min_seg_len) {
+                laser_mode_t mode, int buf_samples, long min_seg_len,
+                float scan_speed) {
   SDL_AudioSpec req, given;
   int max_ch;
   SDL_zero(req);
@@ -176,6 +183,7 @@ void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
   laser_flip_y = flip_y;
   laser_mode = mode;
   laser_min_seg_len = min_seg_len;
+  laser_scan_speed = (scan_speed > 0.0f) ? scan_speed : 1.0f;
 
   /* Determine how many channels the device must provide. */
   max_ch = audio_l_ch;
@@ -328,7 +336,7 @@ void laser_submit_frame(const vector_t *segs, int count) {
     return;
   }
 
-  n_per_seg = frame_samples / valid;
+  n_per_seg = (int)((float)(frame_samples / valid) * laser_scan_speed + 0.5f);
   if (n_per_seg < 1)
     n_per_seg = 1;
 

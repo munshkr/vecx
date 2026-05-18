@@ -201,6 +201,7 @@ struct cli_options {
   laser_mode_t laser_mode;
   int laser_buf_samples;
   long laser_min_seg_len;
+  float laser_scan_speed;
 };
 
 static void set_default_options(struct cli_options *opts) {
@@ -218,6 +219,7 @@ static void set_default_options(struct cli_options *opts) {
   opts->laser_mode = LASER_MODE_XYZ;
   opts->laser_buf_samples = 256;
   opts->laser_min_seg_len = 0;
+  opts->laser_scan_speed = 1.0f;
 }
 
 static const char *find_config_path(int argc, char **argv) {
@@ -344,6 +346,15 @@ static void load_config_file(const char *path, struct cli_options *opts,
         fclose(f);
         exit(EXIT_FAILURE);
       }
+    } else if (strcmp(key, "laser-scan-speed") == 0) {
+      opts->laser_scan_speed = (float)atof(val);
+      if (opts->laser_scan_speed <= 0.0f) {
+        fprintf(stderr,
+                "%s: %s:%d: invalid value for 'laser-scan-speed': '%s'\n", prog,
+                path, lineno, val);
+        fclose(f);
+        exit(EXIT_FAILURE);
+      }
     } else {
       fprintf(stderr, "%s: %s:%d: unknown option '%s'\n", prog, path, lineno,
               key);
@@ -377,6 +388,9 @@ static void usage(const char *prog, int exitcode) {
       "256)\n"
       "  --laser-min-seg-len N  Skip segments shorter than N Vectrex units\n"
       "                         (Manhattan |dx|+|dy|; 0=off, default: 0)\n"
+      "  --laser-scan-speed F   Samples-per-segment multiplier (default: 1.0)\n"
+      "                         >1.0 = more dwell per segment (slow galvos);\n"
+      "                         <1.0 = faster scan (more content per frame)\n"
       "  --config FILE          Load configuration from FILE\n"
       "  --help                 Show this help and exit\n",
       prog);
@@ -451,6 +465,14 @@ static void parse_cli_options(int argc, char **argv, struct cli_options *opts) {
       opts->laser_min_seg_len = atol(require_arg(name, &i, argc, argv, val));
       if (opts->laser_min_seg_len < 0) {
         fprintf(stderr, "%s: invalid value for '--laser-min-seg-len'\n",
+                argv[0]);
+        usage(argv[0], 1);
+      }
+    } else if (strcmp(name, "laser-scan-speed") == 0) {
+      opts->laser_scan_speed =
+          (float)atof(require_arg(name, &i, argc, argv, val));
+      if (opts->laser_scan_speed <= 0.0f) {
+        fprintf(stderr, "%s: invalid value for '--laser-scan-speed'\n",
                 argv[0]);
         usage(argv[0], 1);
       }
@@ -547,7 +569,7 @@ int main(int argc, char *argv[]) {
   laser_init(opts.device, opts.audio_l_ch, opts.audio_r_ch, opts.laser_x_ch,
              opts.laser_y_ch, opts.laser_z_ch, opts.laser_flip_x,
              opts.laser_flip_y, opts.laser_mode, opts.laser_buf_samples,
-             opts.laser_min_seg_len);
+             opts.laser_min_seg_len, opts.laser_scan_speed);
   osint_emuloop();
   laser_done();
   SDL_Quit();

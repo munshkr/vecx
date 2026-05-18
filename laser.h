@@ -25,10 +25,14 @@ typedef enum {
  * Smaller values reduce output latency at the cost of higher underrun risk.
  * min_seg_len: minimum segment length in Vectrex units (Manhattan distance
  * |dx|+|dy|).  Segments shorter than this are skipped in LASER_MODE_OPTIMIZED.
- * 0 disables the filter.  ALG_MAX_X=33000, ALG_MAX_Y=41000 for reference. */
+ * 0 disables the filter.  ALG_MAX_X=33000, ALG_MAX_Y=41000 for reference.
+ * scan_speed: multiplier applied to samples-per-segment in
+ * LASER_MODE_OPTIMIZED.  1.0 = default.  Values > 1.0 increase dwell time per
+ * segment (useful for slow galvanometers); values < 1.0 scan faster. */
 void laser_init(const char *device_name, int audio_l_ch, int audio_r_ch,
                 int x_ch, int y_ch, int z_ch, int flip_x, int flip_y,
-                laser_mode_t mode, int buf_samples, long min_seg_len);
+                laser_mode_t mode, int buf_samples, long min_seg_len,
+                float scan_speed);
 void laser_done(void);
 
 /* Called once per Vectrex clock tick (1.5 MHz) from alg_sstep().
